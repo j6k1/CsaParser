@@ -131,8 +131,7 @@ impl<S> CsaParser<S> where S: CsaStream {
 			} else if (line.starts_with("P+") || line.starts_with("P-")) &&
 						 stage >= Stage::Version && stage <= Stage::Info {
 				stage = Stage::Position;
-			} else if (line.starts_with("+") ||
-						line.starts_with("-")) && stage == Stage::Position {
+			} else if (line == "+" || line == "-") && stage == Stage::Position {
 				stage = Stage::Moves;
 			} else if line.starts_with("%") && stage >= Stage::Position {
 				stage = Stage::EndState;
