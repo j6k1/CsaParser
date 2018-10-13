@@ -7,6 +7,7 @@ use std::io::BufReader;
 use std::io::BufRead;
 use std::fs::File;
 use std::fs::OpenOptions;
+use std::collections::HashMap;
 
 use usiagent::error::*;
 use usiagent::shogi::*;
@@ -92,11 +93,104 @@ impl<S> CsaParser<S> where S: CsaStream {
 		}
 	}
 
-	pub fn parse() -> Result<Vec<CsaData>,CsaParserError> {
+	pub fn parse(&mut self) -> Result<Vec<CsaData>,CsaParserError> {
 		let mut results:Vec<CsaData> = Vec::new();
+		let mut comments:Vec<String> = Vec::new();
+		let mut stage = Stage::Initial;
+
+		let mut current = self.read_next(&mut comments)?;
+
+		let mut version = None;
+		let mut info = None;
+		let mut banmen:[[KomaKind; 9]; 9] = [[KomaKind::Blank; 9]; 9];
+		let mut msente:HashMap<MochigomaKind,u32> = HashMap::new();
+		let mut mgote:HashMap<MochigomaKind,u32> = HashMap::new();
+		let mut mvs:Vec<Move> = Vec::new();
+		let mut elapsed:Vec<Option<u32>> = Vec::new();
+		let mut end_state = None;
+
+		while let Some(line) = current {
+			if line.starts_with("V") && stage == Stage::Initial {
+				stage = Stage::Version;
+				version = Some(line.clone());
+			} else if (line.starts_with("N+") || line.starts_with("N-") ||
+						line.starts_with("$")) && stage == Stage::Version {
+				stage = Stage::Info;
+
+				if let None = info {
+					info = Some(KifuInfo::new());
+				}
+
+				if let Some(ref mut info) = info {
+					info.parse(&line)?;
+				}
+			} else if line.starts_with("PI") && stage >= Stage::Version && stage <= Stage::Info {
+				stage = Stage::Position;
+			} else if line.starts_with("P1") && stage >= Stage::Version && stage <= Stage::Info {
+				stage = Stage::Position;
+			} else if (line.starts_with("P+") || line.starts_with("P-")) &&
+						 stage >= Stage::Version && stage <= Stage::Info {
+				stage = Stage::Position;
+			} else if (line.starts_with("+") ||
+						line.starts_with("-")) && stage == Stage::Position {
+				stage = Stage::Moves;
+			} else if line.starts_with("%") && stage >= Stage::Position {
+				stage = Stage::EndState;
+				end_state = Some(EndState::try_from(line.to_string())?);
+			} else if line == "/" && stage >= Stage::Position {
+				stage = Stage::Initial;
+
+				results.push(CsaData::new(version,
+											info,
+											Banmen(banmen),
+											MochigomaCollections::Pair(msente,mgote),
+											mvs,elapsed,end_state));
+				version = None;
+				info = None;
+				banmen = [[KomaKind::Blank; 9]; 9];
+				msente = HashMap::new();
+				mgote = HashMap::new();
+				mvs = Vec::new();
+				elapsed = Vec::new();
+				end_state = None;
+			} else {
+				return Err(CsaParserError::FormatError(String::from("Invalid csa format.")));
+			}
+
+			current = self.read_next(&mut comments)?;
+		}
+
+		if stage >= Stage::Position {
+			results.push(CsaData::new(version,
+										info,
+										Banmen(banmen),
+										MochigomaCollections::Pair(msente,mgote),
+										mvs,elapsed,end_state));
+		}
 
 		Ok(results)
 	}
+
+	fn read_next(&mut self, comments:&mut Vec<String>) -> Result<Option<String>,CsaStreamReadError> {
+		while let Some(ref line) = self.st.next()? {
+			if line.starts_with("'") {
+				comments.push(String::from(&line.as_str()[1..]));
+			} else {
+				return Ok(Some(line.clone()));
+			}
+		}
+
+		Ok(None)
+	}
+}
+#[derive(Clone, Copy, Eq, PartialOrd, PartialEq, Debug)]
+enum Stage {
+	Initial = 0,
+	Version,
+	Info,
+	Position,
+	Moves,
+	EndState,
 }
 #[derive(Debug)]
 pub struct CsaData {
@@ -105,21 +199,24 @@ pub struct CsaData {
 	pub initial_position:Banmen,
 	pub initial_mochigoma:MochigomaCollections,
 	pub moves:Vec<Move>,
-	pub elapsed:Vec<u32>,
+	pub elapsed:Vec<Option<u32>>,
 	pub end_state:Option<EndState>,
 }
 impl CsaData {
-	pub fn new(banmen:Banmen,
+	pub fn new(version:Option<String>,
+				kifu_info:Option<KifuInfo>,
+				banmen:Banmen,
 				mochigoma:MochigomaCollections,
-				mvs:Vec<Move>, elapsed:Vec<u32>) -> CsaData {
+				mvs:Vec<Move>, elapsed:Vec<Option<u32>>,
+				end_state:Option<EndState>) -> CsaData {
 		CsaData {
-			version:None,
-			kifu_info:None,
+			version:version,
+			kifu_info:kifu_info,
 			initial_position:banmen,
 			initial_mochigoma:mochigoma,
 			moves:mvs,
 			elapsed:elapsed,
-			end_state:None,
+			end_state:end_state,
 		}
 	}
 }
@@ -147,10 +244,124 @@ impl KifuInfo {
 			opening:None,
 		}
 	}
+
+	pub fn parse(&mut self, line:&String) -> Result<(),CsaParserError> {
+		if line.starts_with("N+") {
+			self.sente_name = Some(String::from(&line.as_str()[2..]));
+		} else if line.starts_with("N-") {
+			self.gote_name = Some(String::from(&line.as_str()[2..]));
+		} else if line.starts_with("$EVENT:") {
+			self.event = Some(String::from(&line.as_str()[7..]));
+		} else if line.starts_with("$SITE:") {
+			self.site = Some(String::from(&line.as_str()[6..]));
+		} else if line.starts_with("$START_TIME:") {
+			self.start_time = Some(String::from(&line.as_str()[12..]));
+		} else if line.starts_with("$END_TIME:") {
+			self.end_time = Some(String::from(&line.as_str()[10..]));
+		} else if line.starts_with("$TIME_LIMIT:") {
+			let t = String::from(&line.as_str()[12..]);
+			let mut chars = t.chars();
+
+			let mut hh = String::new();
+			let mut mm = String::new();
+
+			for _ in 0..2 {
+				match chars.next() {
+					None => {
+						return Err(CsaParserError::FormatError(String::from(
+							"Invalid csa info format of timelimit."
+						)));
+					},
+					Some(c) => {
+						hh.push(c);
+					}
+				}
+			}
+
+			let h:u32 = hh.parse()?;
+
+			let delimiter = chars.next();
+
+			if delimiter == None {
+				return Err(CsaParserError::FormatError(String::from(
+					"Invalid csa info format of timelimit."
+				)));
+			}
+
+			if let Some(c) = delimiter {
+				if c != ':' {
+					return Err(CsaParserError::FormatError(String::from(
+						"Invalid csa info format of timelimit."
+					)));
+				}
+			}
+
+			for _ in 0..2 {
+				match chars.next() {
+					None => {
+						return Err(CsaParserError::FormatError(String::from(
+							"Invalid csa info format of timelimit."
+						)));
+					},
+					Some(c) => {
+						mm.push(c);
+					}
+				}
+			}
+
+			let m:u32 = mm.parse()?;
+
+			let s = match chars.next() {
+				None => None,
+				Some('+') => {
+					let mut ss = String::new();
+
+					for _ in 0..2 {
+						match chars.next() {
+							None => {
+								return Err(CsaParserError::FormatError(String::from(
+									"Invalid csa info format of timelimit."
+								)));
+							},
+							Some(c) => {
+								ss.push(c);
+							}
+						}
+					}
+
+					let s = ss.parse()?;
+
+					match chars.next() {
+						None => Some(s),
+						Some(_) => {
+							return Err(CsaParserError::FormatError(String::from(
+								"Invalid csa info format of timelimit."
+							)));
+						}
+					}
+				},
+				_ => {
+					return Err(CsaParserError::FormatError(String::from(
+						"Invalid csa info format of timelimit."
+					)));
+				}
+			};
+
+			self.time_limit = Some((h * 60 + m, s));
+		} else if line.starts_with("$OPENING:") {
+			self.opening = Some(String::from(&line.as_str()[9..]));
+		} else {
+			return Err(CsaParserError::FormatError(String::from(
+				"Invalid csa info format."
+			)));
+		}
+
+		Ok(())
+	}
 }
-#[derive(Debug)]
+#[derive(Clone, Copy, Eq, PartialOrd, PartialEq, Debug)]
 pub enum EndState {
-	Toryo, // 投了
+	Toryo = 0, // 投了
 	Chudan, // 中断
 	Sennichite, // 千日手
 	TimeUp, // 手番側が時間切れで負け
