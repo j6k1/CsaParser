@@ -106,12 +106,12 @@ pub struct CsaData {
 	pub initial_mochigoma:MochigomaCollections,
 	pub moves:Vec<Move>,
 	pub elapsed:Vec<u32>,
-	pub end_state:EndState,
+	pub end_state:Option<EndState>,
 }
 impl CsaData {
 	pub fn new(banmen:Banmen,
 				mochigoma:MochigomaCollections,
-				mvs:Vec<Move>, elapsed:Vec<u32>, end_state:EndState) -> CsaData {
+				mvs:Vec<Move>, elapsed:Vec<u32>) -> CsaData {
 		CsaData {
 			version:None,
 			kifu_info:None,
@@ -119,7 +119,7 @@ impl CsaData {
 			initial_mochigoma:mochigoma,
 			moves:mvs,
 			elapsed:elapsed,
-			end_state:end_state,
+			end_state:None,
 		}
 	}
 }
