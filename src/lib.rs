@@ -33,6 +33,8 @@ impl CsaFileStream {
 		let mut buf = String::new();
 		let n = reader.read_line(&mut buf)?;
 
+		buf = buf.trim_right().to_string();
+
 		let lines = if n == 0 {
 			None
 		} else {
