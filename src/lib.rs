@@ -82,6 +82,22 @@ impl CsaStream for CsaFileStream {
 		}
 	}
 }
+pub struct CsaParser<S> where S: CsaStream {
+	st:S,
+}
+impl<S> CsaParser<S> where S: CsaStream {
+	pub fn new(st:S) -> CsaParser<S> where S: CsaStream {
+		CsaParser {
+			st:st
+		}
+	}
+
+	pub fn parse() -> Result<Vec<CsaData>,CsaParserError> {
+		let mut results:Vec<CsaData> = Vec::new();
+
+		Ok(results)
+	}
+}
 #[derive(Debug)]
 pub struct CsaData {
 	pub version:Option<String>,
