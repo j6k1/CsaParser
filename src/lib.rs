@@ -8,8 +8,8 @@ use std::io::BufRead;
 use std::fs::File;
 use std::fs::OpenOptions;
 use std::collections::HashMap;
+use std::str::Chars;
 
-use usiagent::error::*;
 use usiagent::shogi::*;
 use usiagent::shogi::KomaKind::{
 						SFu,
@@ -43,7 +43,6 @@ use usiagent::shogi::KomaKind::{
 						Blank
 };
 use usiagent::rule::*;
-use usiagent::TryFrom;
 
 use error::*;
 
@@ -83,6 +82,35 @@ impl CsaFileStream {
 			lines:lines,
 			current_pos:0,
 		})
+	}
+}
+pub struct CsaStringReader {
+
+}
+impl CsaStringReader {
+	pub fn new() -> CsaStringReader {
+		CsaStringReader {
+
+		}
+	}
+
+	pub fn read(&mut self,chars:&mut Chars,len:u32) -> Result<String,CsaParserError> {
+		let mut s = String::new();
+
+		for _ in 0..len {
+			match chars.next() {
+				None => {
+					return Err(CsaParserError::FormatError(String::from(
+						"Invalid csa format, Could not read the specified length."
+					)));
+				},
+				Some(c) => {
+					s.push(c);
+				}
+			}
+		}
+
+		Ok(s)
 	}
 }
 impl CsaStream for CsaFileStream {
@@ -202,7 +230,7 @@ impl<S> CsaParser<S> where S: CsaStream {
 				current = self.read_next(&mut comments)?;
 			} else if line.starts_with("%") && stage >= Stage::Position {
 				stage = Stage::EndState;
-				end_state = Some(EndState::try_from(line.to_string())?);
+				end_state = Some(EndState::try_from_csa(&line.to_string())?);
 				current = self.read_next(&mut comments)?;
 			} else if line == "/" && stage >= Stage::Position {
 				stage = Stage::Initial;
@@ -319,6 +347,8 @@ impl KifuInfo {
 	}
 
 	pub fn parse(&mut self, line:&String) -> Result<(),CsaParserError> {
+		let mut reader = CsaStringReader::new();
+
 		if line.starts_with("N+") {
 			self.sente_name = Some(String::from(&line.as_str()[2..]));
 		} else if line.starts_with("N-") {
@@ -335,23 +365,7 @@ impl KifuInfo {
 			let t = String::from(&line.as_str()[12..]);
 			let mut chars = t.chars();
 
-			let mut hh = String::new();
-			let mut mm = String::new();
-
-			for _ in 0..2 {
-				match chars.next() {
-					None => {
-						return Err(CsaParserError::FormatError(String::from(
-							"Invalid csa info format of timelimit."
-						)));
-					},
-					Some(c) => {
-						hh.push(c);
-					}
-				}
-			}
-
-			let h:u32 = hh.parse()?;
+			let hh = reader.read(&mut chars, 2)?;
 
 			let delimiter = chars.next();
 
@@ -369,38 +383,15 @@ impl KifuInfo {
 				}
 			}
 
-			for _ in 0..2 {
-				match chars.next() {
-					None => {
-						return Err(CsaParserError::FormatError(String::from(
-							"Invalid csa info format of timelimit."
-						)));
-					},
-					Some(c) => {
-						mm.push(c);
-					}
-				}
-			}
+			let mm = reader.read(&mut chars, 2)?;
 
+			let h:u32 = hh.parse()?;
 			let m:u32 = mm.parse()?;
 
 			let s = match chars.next() {
 				None => None,
 				Some('+') => {
-					let mut ss = String::new();
-
-					for _ in 0..2 {
-						match chars.next() {
-							None => {
-								return Err(CsaParserError::FormatError(String::from(
-									"Invalid csa info format of timelimit."
-								)));
-							},
-							Some(c) => {
-								ss.push(c);
-							}
-						}
-					}
+					let ss = reader.read(&mut chars, 2)?;
 
 					let s = ss.parse()?;
 
@@ -436,7 +427,7 @@ pub trait TryFromCsa<T> where Self: Sized {
 	fn try_from_csa(kind:T) -> Result<Self,CsaParserError>;
 }
 impl<'a> TryFromCsa<&'a String> for MochigomaKind {
-	fn try_from_csa(kind:&'a String) -> Result<Self,CsaParserError> {
+	fn try_from_csa(kind:&'a String) -> Result<MochigomaKind,CsaParserError> {
 		Ok(match kind.as_str() {
 			"Fu" | "TO" => MochigomaKind::Fu,
 			"KY" | "NY" => MochigomaKind::Kyou,
@@ -454,7 +445,7 @@ impl<'a> TryFromCsa<&'a String> for MochigomaKind {
 	}
 }
 impl<'a> TryFromCsa<(Teban,&'a String)> for KomaKind {
-	fn try_from_csa(s:(Teban,&'a String)) -> Result<Self,CsaParserError> {
+	fn try_from_csa(s:(Teban,&'a String)) -> Result<KomaKind,CsaParserError> {
 		let (teban,kind) = s;
 
 		Ok(match kind.as_str() {
@@ -481,6 +472,31 @@ impl<'a> TryFromCsa<(Teban,&'a String)> for KomaKind {
 		})
 	}
 }
+impl<'a> TryFromCsa<&'a String> for EndState {
+	fn try_from_csa(kind:&'a String) -> Result<EndState,CsaParserError> {
+		Ok(match kind.as_str() {
+			"%TORYO" => EndState::Toryo,
+			"%CHUDAN" => EndState::Chudan,
+			"%SENNICHITE" => EndState::Sennichite,
+			"%TIME_UP" => EndState::TimeUp,
+			"%ILLEGAL_MOVE" => EndState::IllegalMove,
+			"%+ILLEGAL_ACTION" => EndState::SIllegalAction,
+			"%-ILLEGAL_ACTION" => EndState::GIllegalAction,
+			"%JISHOGI" => EndState::Jishogi,
+			"%KACHI" => EndState::Kachi,
+			"%HIKIWAKE" => EndState::Hikiwake,
+			"%MATTA" => EndState::Matta,
+			"%TSUMI" => EndState::Tsumi,
+			"%FUZUMI" => EndState::Fuzumi,
+			"%ERROR" => EndState::Error,
+			_ => {
+				return Err(CsaParserError::FormatError(String::from(
+					"Invalid end state."))
+				);
+			}
+		})
+	}
+}
 struct CsaPositionParser {
 
 }
@@ -499,6 +515,15 @@ impl CsaPositionParser {
 
 	pub fn parse(&mut self, lines:Vec<String>)
 		-> Result<(Banmen,MochigomaCollections),CsaParserError> {
+
+		if lines.len() == 0 {
+			return Err(CsaParserError::InvalidStateError(String::from(
+				"lines is empty."
+			)));
+		}
+
+		let mut reader = CsaStringReader::new();
+
 		if lines[0].starts_with("P1") {
 			let initial_banmen = BANMEN_START_POS.clone();
 			let mut initial_banmen = initial_banmen.0;
@@ -525,18 +550,7 @@ impl CsaPositionParser {
 				let x = x as usize - '0' as usize;
 				let y = y as usize - '0' as usize;
 
-				let mut kind = String::new();
-
-				for _ in 0..2 {
-					match chars.next() {
-						None => {
-							return Err(self.create_error());
-						},
-						Some(c) => {
-							kind.push(c);
-						}
-					}
-				}
+				let mut kind = reader.read(&mut chars, 2)?;
 
 				let k = initial_banmen[y-1][9-x];
 
@@ -571,8 +585,8 @@ impl CsaPositionParser {
 			Ok((Banmen(initial_banmen),MochigomaCollections::Empty))
 		} else if lines[0].starts_with("P1") {
 			let mut initial_banmen:[[KomaKind; 9]; 9] = [[KomaKind::Blank; 9]; 9];
-			let mut ms:HashMap<MochigomaKind,u32> = HashMap::new();
-			let mut mg:HashMap<MochigomaKind,u32> = HashMap::new();
+			let mut ms = Rule::create_initial_mochigoma_hashmap();
+			let mut mg = Rule::create_initial_mochigoma_hashmap();
 
 			ms.insert(MochigomaKind::Fu, 9);
 			ms.insert(MochigomaKind::Kyou, 2);
@@ -632,18 +646,7 @@ impl CsaPositionParser {
 								}
 							};
 
-							let mut kind = String::new();
-
-							for _ in 0..2 {
-								match chars.next() {
-									None => {
-										return Err(self.create_error());
-									},
-									Some(c) => {
-										kind.push(c);
-									}
-								}
-							}
+							let kind = reader.read(&mut chars, 2)?;
 
 							if kind == "OU" {
 								match teban {
@@ -708,24 +711,8 @@ impl CsaPositionParser {
 			Ok((Banmen(initial_banmen),MochigomaCollections::Pair(ms,mg)))
 		} else if lines[0].starts_with("P+") || lines[0].starts_with("P-") {
 			let mut initial_banmen:[[KomaKind; 9]; 9] = [[KomaKind::Blank; 9]; 9];
-			let mut ms:HashMap<MochigomaKind,u32> = HashMap::new();
-			let mut mg:HashMap<MochigomaKind,u32> = HashMap::new();
-
-			ms.insert(MochigomaKind::Fu, 9);
-			ms.insert(MochigomaKind::Kyou, 2);
-			ms.insert(MochigomaKind::Kei, 2);
-			ms.insert(MochigomaKind::Gin, 2);
-			ms.insert(MochigomaKind::Kin, 2);
-			ms.insert(MochigomaKind::Kaku, 1);
-			ms.insert(MochigomaKind::Hisha, 1);
-
-			mg.insert(MochigomaKind::Fu, 9);
-			mg.insert(MochigomaKind::Kyou, 2);
-			mg.insert(MochigomaKind::Kei, 2);
-			mg.insert(MochigomaKind::Gin, 2);
-			mg.insert(MochigomaKind::Kin, 2);
-			mg.insert(MochigomaKind::Kaku, 1);
-			mg.insert(MochigomaKind::Hisha, 1);
+			let mut ms = Rule::create_initial_mochigoma_hashmap();
+			let mut mg = Rule::create_initial_mochigoma_hashmap();
 
 			let mut sou_count = 1;
 			let mut gou_count = 1;
@@ -796,18 +783,7 @@ impl CsaPositionParser {
 						let x = x as usize - '0' as usize;
 						let y = y as usize - '0' as usize;
 
-						let mut kind = String::new();
-
-						for _ in 0..2 {
-							match chars.next() {
-								None => {
-									return Err(self.create_error());
-								},
-								Some(c) => {
-									kind.push(c);
-								}
-							}
-						}
+						let kind = reader.read(&mut chars, 2)?;
 
 						let k = initial_banmen[y-1][9-x];
 
@@ -889,6 +865,12 @@ impl CsaMovesParser {
 
 	pub fn parse(&mut self, lines:Vec<String>)
 		-> Result<(Vec<Move>,Vec<Option<u32>>),CsaParserError> {
+
+		if lines.len() == 0 {
+			return Err(CsaParserError::InvalidStateError(String::from(
+				"lines is empty."
+			)));
+		}
 
 		let teban = match &*lines[0] {
 			"+" => Teban::Sente,
@@ -994,27 +976,4 @@ pub enum EndState {
 	Tsumi, // 詰み
 	Fuzumi, // 不詰
 	Error, // エラー
-}
-impl TryFrom<String,TypeConvertError<String>> for EndState {
-	fn try_from(kind:String) -> Result<EndState,TypeConvertError<String>> {
-		Ok(match &*kind {
-			"%TORYO" => EndState::Toryo,
-			"%CHUDAN" => EndState::Chudan,
-			"%SENNICHITE" => EndState::Sennichite,
-			"%TIME_UP" => EndState::TimeUp,
-			"%ILLEGAL_MOVE" => EndState::IllegalMove,
-			"%+ILLEGAL_ACTION" => EndState::SIllegalAction,
-			"%-ILLEGAL_ACTION" => EndState::GIllegalAction,
-			"%JISHOGI" => EndState::Jishogi,
-			"%KACHI" => EndState::Kachi,
-			"%HIKIWAKE" => EndState::Hikiwake,
-			"%MATTA" => EndState::Matta,
-			"%TSUMI" => EndState::Tsumi,
-			"%FUZUMI" => EndState::Fuzumi,
-			"%ERROR" => EndState::Error,
-			_ => {
-				return Err(TypeConvertError::SyntaxError(String::from("Invalid end state.")));
-			}
-		})
-	}
 }

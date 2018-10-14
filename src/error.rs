@@ -3,8 +3,6 @@ use std::fmt;
 use std::error;
 use std::num::ParseIntError;
 
-use usiagent::error::*;
-
 #[derive(Debug)]
 pub enum CsaStreamReadError {
 	IOError(io::Error),
@@ -39,7 +37,7 @@ pub enum CsaParserError {
 	StreamReadError(CsaStreamReadError),
 	FormatError(String),
 	ParseIntError(ParseIntError),
-	TypeConvertError(TypeConvertError<String>),
+	InvalidStateError(String),
 }
 impl fmt::Display for CsaParserError {
 	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -47,7 +45,7 @@ impl fmt::Display for CsaParserError {
 			CsaParserError::StreamReadError(_) => write!(f, "There was an error loading the stream."),
 			CsaParserError::FormatError(ref s) => s.fmt(f),
 			CsaParserError::ParseIntError(ref e) => e.fmt(f),
-			CsaParserError::TypeConvertError(ref e) => e.fmt(f),
+			CsaParserError::InvalidStateError (ref s) => s.fmt(f),
 		}
 	}
 }
@@ -57,7 +55,7 @@ impl error::Error for CsaParserError {
 			CsaParserError::StreamReadError(_) => "There was an error loading the stream.",
 			CsaParserError::FormatError(_) => "Invalid format.",
 			CsaParserError::ParseIntError(ref e) => e.description(),
-			CsaParserError::TypeConvertError(ref e) => e.description(),
+			CsaParserError::InvalidStateError(_) => "Invalid read state.",
 		}
 	}
 
@@ -66,7 +64,7 @@ impl error::Error for CsaParserError {
 			CsaParserError::StreamReadError(ref e) => Some(e),
 			CsaParserError::FormatError(_) => None,
 			CsaParserError::ParseIntError(ref e) => Some(e),
-			CsaParserError::TypeConvertError(ref e) => Some(e),
+			CsaParserError::InvalidStateError(_) => None,
 		}
 	}
 }
@@ -78,10 +76,5 @@ impl From<CsaStreamReadError> for CsaParserError {
 impl From<ParseIntError> for CsaParserError {
 	fn from(err: ParseIntError) -> CsaParserError {
 		CsaParserError::ParseIntError(err)
-	}
-}
-impl From<TypeConvertError<String>> for CsaParserError {
-	fn from(err: TypeConvertError<String>) -> CsaParserError {
-		CsaParserError::TypeConvertError(err)
 	}
 }
