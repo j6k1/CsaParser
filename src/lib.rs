@@ -11,7 +11,37 @@ use std::collections::HashMap;
 
 use usiagent::error::*;
 use usiagent::shogi::*;
-use usiagent::shogi::KomaKind::{SFu,SKyou,SKei,SGin,SKin,SKaku,SHisha,SOu,GFu,GKyou,GKei,GGin,GKin,GKaku,GHisha,GOu,Blank};
+use usiagent::shogi::KomaKind::{
+						SFu,
+						SKyou,
+						SKei,
+						SGin,
+						SKin,
+						SKaku,
+						SHisha,
+						SOu,
+						SFuN,
+						SKyouN,
+						SKeiN,
+						SGinN,
+						SKakuN,
+						SHishaN,
+						GFu,
+						GKyou,
+						GKei,
+						GGin,
+						GKin,
+						GKaku,
+						GHisha,
+						GOu,
+						GFuN,
+						GKyouN,
+						GKeiN,
+						GGinN,
+						GKakuN,
+						GHishaN,
+						Blank
+};
 use usiagent::rule::*;
 use usiagent::TryFrom;
 
@@ -418,7 +448,45 @@ impl CsaPositionParser {
 		))
 	}
 
-	pub fn parse(&mut self, lines:Vec<String>) -> Result<(Banmen,MochigomaCollections),CsaParserError> {
+	fn create_mochigoma_kind(&self,s:&str) -> Result<MochigomaKind,CsaParserError> {
+		Ok(match s {
+			"Fu" | "TO" => MochigomaKind::Fu,
+			"KY" | "NY" => MochigomaKind::Kyou,
+			"KE" | "NK" => MochigomaKind::Kei,
+			"GI" | "NG" => MochigomaKind::Gin,
+			"KI" => MochigomaKind::Kin,
+			"KA" | "UM" => MochigomaKind::Kaku,
+			"HI" | "RY" => MochigomaKind::Hisha,
+			_ => {
+				return Err(self.create_error());
+			}
+		})
+	}
+
+	fn create_komakind(&self,teban:Teban,s:&str) -> Result<KomaKind,CsaParserError> {
+		Ok(match s {
+			"FU" | "KY" | "KE" | "GI" | "KI" | "KA" | "HI" => {
+				KomaKind::from((teban,self.create_mochigoma_kind(s)?))
+			},
+			"TO" if teban == Teban::Sente => SFuN,
+			"TO" => GFuN,
+			"NY" if teban == Teban::Sente => SKyouN,
+			"NY" => GKyouN,
+			"NK" if teban == Teban::Sente => SKeiN,
+			"NK" => GKeiN,
+			"NG" if teban == Teban::Sente => SGinN,
+			"NG" => GGinN,
+			"UM" if teban == Teban::Sente => SKakuN,
+			"UM" => GKakuN,
+			"RY" if teban == Teban::Sente => SHishaN,
+			"RY" => GHishaN,
+			_ => {
+				return Err(self.create_error());
+			}
+		})
+	}
+	pub fn parse(&mut self, lines:Vec<String>)
+		-> Result<(Banmen,MochigomaCollections),CsaParserError> {
 		if lines[0].starts_with("P1") {
 			let initial_banmen = BANMEN_START_POS.clone();
 			let mut initial_banmen = initial_banmen.0;
@@ -585,18 +653,7 @@ impl CsaPositionParser {
 									}
 								}
 							} else {
-								let k = match &*kind {
-									"Fu" => MochigomaKind::Fu,
-									"KY" => MochigomaKind::Kyou,
-									"KE" => MochigomaKind::Kei,
-									"GI" => MochigomaKind::Gin,
-									"KI" => MochigomaKind::Kin,
-									"KA" => MochigomaKind::Kaku,
-									"HI" => MochigomaKind::Hisha,
-									_ => {
-										return Err(self.create_error());
-									}
-								};
+								let k = self.create_mochigoma_kind(&*kind)?;
 
 								match teban {
 									Teban::Sente => {
@@ -625,7 +682,7 @@ impl CsaPositionParser {
 									}
 								}
 
-								initial_banmen[i as usize][j as usize] = KomaKind::from((teban,k));
+								initial_banmen[i as usize][j as usize] = self.create_komakind(teban,&*kind)?;
 							}
 						},
 						_ => {
@@ -766,18 +823,7 @@ impl CsaPositionParser {
 								}
 							}
 						} else {
-							let k = match &*kind {
-								"Fu" => MochigomaKind::Fu,
-								"KY" => MochigomaKind::Kyou,
-								"KE" => MochigomaKind::Kei,
-								"GI" => MochigomaKind::Gin,
-								"KI" => MochigomaKind::Kin,
-								"KA" => MochigomaKind::Kaku,
-								"HI" => MochigomaKind::Hisha,
-								_ => {
-									return Err(self.create_error());
-								}
-							};
+							let k = self.create_mochigoma_kind(&*kind)?;
 
 							match teban {
 								Teban::Sente => {
@@ -806,7 +852,7 @@ impl CsaPositionParser {
 								}
 							}
 
-							initial_banmen[y-1][9-x] = KomaKind::from((teban,k));
+							initial_banmen[y-1][9-x] = self.create_komakind(teban,&*kind)?;
 						}
 					}
 				}
@@ -818,6 +864,108 @@ impl CsaPositionParser {
 		}
 	}
 }
+/*
+struct CsaMovesParser {
+
+}
+impl CsaMovesParser {
+	pub fn new() -> CsaMovesParser {
+		CsaMovesParser {
+
+		}
+	}
+
+	pub fn parse(&mut self, lines:Vec<String>)
+		-> Result<(Vec<Move>,Vec<Option<u32>>),CsaParserError> {
+
+		let teban = match &*lines[0] {
+			"+" => Teban::Sente,
+			"-" => Teban::Gote,
+			_ => {
+				return Err(self.create_error());
+			}
+		};
+
+		for line in lines.into_iter().skip(1) {
+			match teban {
+				Teban::Sente if !lines.starts_with("+") => {
+					return Err(self.create_error());
+				},
+				Teban::Gote if !lines.starts_with("-") => {
+					return Err(self.create_error());
+				},
+				_ => ()
+			}
+
+			let mut chars = line.chars();
+			chars.next();
+
+			let (sx,sy) = match chars.next() {
+				None => {
+					return Err(self.create_error());
+				},
+				Some(sx) => {
+					let sx = sx as u32 - '0' as u32;
+
+					let sy = match chars.next() {
+						None => {
+							return Err(self.create_error());
+						},
+						Some(sy) => {
+							sy as u32 - '0' as u32
+						}
+					};
+
+					(sx,sy)
+				}
+			};
+
+			if sx < 1 || sx > 9 || sy < 1 || sy > 9 {
+				return Err(self.create_error());
+			}
+
+			let (dx,dy) = match chars.next() {
+				None => {
+					return Err(self.create_error());
+				},
+				Some(dx) => {
+					let dx = dx as u32 - '0' as u32;
+
+					let dy = match chars.next() {
+						None => {
+							return Err(self.create_error());
+						},
+						Some(dy) => {
+							dy as u32 - '0' as u32
+						}
+					};
+
+					(dx,dy)
+				}
+			};
+
+			if dx < 1 || dx > 9 || dy < 1 || dy > 9 {
+				return Err(self.create_error());
+			}
+
+			let mut kind = String::new();
+
+			for _ in 0..2 {
+				match chars.next() {
+					None => {
+						return Err(self.create_error());
+					},
+					Some(c) => {
+						kind.push(c);
+					}
+				}
+			}
+
+
+		}
+	}
+}
+*/
 #[derive(Clone, Copy, Eq, PartialOrd, PartialEq, Debug)]
 pub enum EndState {
 	Toryo = 0, // 投了
