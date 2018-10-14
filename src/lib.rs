@@ -392,49 +392,48 @@ impl KifuInfo {
 			let mut chars = t.chars();
 
 			let hh = reader.read(&mut chars, 2)?;
-
-			let delimiter = chars.next();
-
-			if delimiter == None {
-				return Err(CsaParserError::FormatError(String::from(
-					"Invalid csa info format of timelimit."
-				)));
-			}
-
-			if let Some(c) = delimiter {
-				if c != ':' {
-					return Err(CsaParserError::FormatError(String::from(
-						"Invalid csa info format of timelimit."
-					)));
-				}
-			}
-
 			let mm = reader.read(&mut chars, 2)?;
 
 			let h:u32 = hh.parse()?;
 			let m:u32 = mm.parse()?;
 
-			let s = match chars.next() {
-				None => None,
-				Some('+') => {
-					let ss = reader.read(&mut chars, 2)?;
+			let delimiter = chars.next();
 
-					let s = ss.parse()?;
-
-					match chars.next() {
-						None => Some(s),
-						Some(_) => {
-							return Err(CsaParserError::FormatError(String::from(
-								"Invalid csa info format of timelimit."
-							)));
-						}
-					}
-				},
-				_ => {
+			let s = if let Some(c) = delimiter {
+				if c != ':' {
 					return Err(CsaParserError::FormatError(String::from(
 						"Invalid csa info format of timelimit."
 					)));
 				}
+
+				match chars.next() {
+					None => {
+						return Err(CsaParserError::FormatError(String::from(
+							"Invalid csa info format of timelimit."
+						)));
+					},
+					Some('+') => {
+						let ss = reader.read(&mut chars, 2)?;
+
+						let s = ss.parse()?;
+
+						match chars.next() {
+							None => Some(s),
+							Some(_) => {
+								return Err(CsaParserError::FormatError(String::from(
+									"Invalid csa info format of timelimit."
+								)));
+							}
+						}
+					},
+					_ => {
+						return Err(CsaParserError::FormatError(String::from(
+							"Invalid csa info format of timelimit."
+						)));
+					}
+				}
+			} else {
+				None
 			};
 
 			self.time_limit = Some((h * 60 + m, s));
