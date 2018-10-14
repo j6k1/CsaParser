@@ -11,6 +11,8 @@ use std::collections::HashMap;
 
 use usiagent::error::*;
 use usiagent::shogi::*;
+use usiagent::shogi::KomaKind::{SFu,SKyou,SKei,SGin,SKin,SKaku,SHisha,SOu,GFu,GKyou,GKei,GGin,GKin,GKaku,GHisha,GOu,Blank};
+use usiagent::rule::*;
 use usiagent::TryFrom;
 
 use error::*;
@@ -102,9 +104,11 @@ impl<S> CsaParser<S> where S: CsaStream {
 
 		let mut version = None;
 		let mut info = None;
-		let mut banmen:[[KomaKind; 9]; 9] = [[KomaKind::Blank; 9]; 9];
-		let mut msente:HashMap<MochigomaKind,u32> = HashMap::new();
-		let mut mgote:HashMap<MochigomaKind,u32> = HashMap::new();
+		let banmen:[[KomaKind; 9]; 9] = [[KomaKind::Blank; 9]; 9];
+		let mut banmen = Banmen(banmen);
+		let msente:HashMap<MochigomaKind,u32> = HashMap::new();
+		let mgote:HashMap<MochigomaKind,u32> = HashMap::new();
+		let mut mc = MochigomaCollections::Pair(msente,mgote);
 		let mut mvs:Vec<Move> = Vec::new();
 		let mut elapsed:Vec<Option<u32>> = Vec::new();
 		let mut end_state = None;
@@ -141,17 +145,20 @@ impl<S> CsaParser<S> where S: CsaStream {
 
 				results.push(CsaData::new(version,
 											info,
-											Banmen(banmen),
-											MochigomaCollections::Pair(msente,mgote),
-											mvs,elapsed,end_state));
+											banmen,
+											mc,
+											mvs,
+											elapsed,
+											end_state,
+											comments));
 				version = None;
 				info = None;
-				banmen = [[KomaKind::Blank; 9]; 9];
-				msente = HashMap::new();
-				mgote = HashMap::new();
+				banmen = Banmen([[KomaKind::Blank; 9]; 9]);
+				mc = MochigomaCollections::Pair(HashMap::new(),HashMap::new());
 				mvs = Vec::new();
 				elapsed = Vec::new();
 				end_state = None;
+				comments = Vec::new();
 			} else {
 				return Err(CsaParserError::FormatError(String::from("Invalid csa format.")));
 			}
@@ -162,12 +169,13 @@ impl<S> CsaParser<S> where S: CsaStream {
 		if stage >= Stage::Position {
 			results.push(CsaData::new(version,
 										info,
-										Banmen(banmen),
-										MochigomaCollections::Pair(msente,mgote),
-										mvs,elapsed,end_state));
+										banmen,
+										mc,
+										mvs,elapsed,end_state,comments));
+			Ok(results)
+		} else {
+			Err(CsaParserError::FormatError(String::from("Invalid csa format.")))
 		}
-
-		Ok(results)
 	}
 
 	fn read_next(&mut self, comments:&mut Vec<String>) -> Result<Option<String>,CsaStreamReadError> {
@@ -200,6 +208,7 @@ pub struct CsaData {
 	pub moves:Vec<Move>,
 	pub elapsed:Vec<Option<u32>>,
 	pub end_state:Option<EndState>,
+	pub comments:Vec<String>,
 }
 impl CsaData {
 	pub fn new(version:Option<String>,
@@ -207,7 +216,8 @@ impl CsaData {
 				banmen:Banmen,
 				mochigoma:MochigomaCollections,
 				mvs:Vec<Move>, elapsed:Vec<Option<u32>>,
-				end_state:Option<EndState>) -> CsaData {
+				end_state:Option<EndState>,
+				comments:Vec<String>) -> CsaData {
 		CsaData {
 			version:version,
 			kifu_info:kifu_info,
@@ -216,6 +226,7 @@ impl CsaData {
 			moves:mvs,
 			elapsed:elapsed,
 			end_state:end_state,
+			comments:comments,
 		}
 	}
 }
@@ -356,6 +367,410 @@ impl KifuInfo {
 		}
 
 		Ok(())
+	}
+}
+struct CsaPositionParser {
+
+}
+impl CsaPositionParser {
+	fn create_error(&self) -> CsaParserError {
+		CsaParserError::FormatError(String::from(
+			"Invalid csa position format."
+		))
+	}
+
+	pub fn parse(&mut self, lines:&Vec<String>) -> Result<(Banmen,MochigomaCollections),CsaParserError> {
+		if lines[0].starts_with("P1") {
+			let initial_banmen = BANMEN_START_POS.clone();
+			let mut initial_banmen = initial_banmen.0;
+			let mut chars = lines[0].chars();
+			chars.next();
+			chars.next();
+
+			while let Some(c) = chars.next() {
+				let x = c;
+
+				let y = match chars.next() {
+					None => {
+						return Err(self.create_error());
+					},
+					Some(y) => {
+						y
+					}
+				};
+
+				if x < '1' || x > '9' || y < '1' || y > '9' {
+					return Err(self.create_error());
+				}
+
+				let x = x as usize - '0' as usize;
+				let y = y as usize - '0' as usize;
+
+				let mut kind = String::new();
+
+				for _ in 0..2 {
+					match chars.next() {
+						None => {
+							return Err(self.create_error());
+						},
+						Some(c) => {
+							kind.push(c);
+						}
+					}
+				}
+
+				let k = initial_banmen[y-1][9-x];
+
+				match &*kind {
+					"FU" if k == SFu || k == GFu => {
+						initial_banmen[y-1][9-x] = Blank;
+					},
+					"KY" if k == SKyou || k == GKyou => {
+						initial_banmen[y-1][9-x] = Blank;
+					},
+					"KE" if k == SKei || k == GKei => {
+						initial_banmen[y-1][9-x] = Blank;
+					},
+					"GI" if k == SGin || k == GGin => {
+						initial_banmen[y-1][9-x] = Blank;
+					},
+					"KI" if k == SKin || k == GKin => {
+						initial_banmen[y-1][9-x] = Blank;
+					},
+					"KA" if k == SKaku || k == GKaku => {
+						initial_banmen[y-1][9-x] = Blank;
+					},
+					"HI" if k == SHisha || k == GHisha => {
+						initial_banmen[y-1][9-x] = Blank;
+					},
+					_ => {
+						return Err(self.create_error());
+					}
+				}
+			}
+
+			Ok((Banmen(initial_banmen),MochigomaCollections::Empty))
+		} else if lines[0].starts_with("P1") {
+			let mut initial_banmen:[[KomaKind; 9]; 9] = [[KomaKind::Blank; 9]; 9];
+			let mut ms:HashMap<MochigomaKind,u32> = HashMap::new();
+			let mut mg:HashMap<MochigomaKind,u32> = HashMap::new();
+
+			ms.insert(MochigomaKind::Fu, 9);
+			ms.insert(MochigomaKind::Kyou, 2);
+			ms.insert(MochigomaKind::Kei, 2);
+			ms.insert(MochigomaKind::Gin, 2);
+			ms.insert(MochigomaKind::Kin, 2);
+			ms.insert(MochigomaKind::Kaku, 1);
+			ms.insert(MochigomaKind::Hisha, 1);
+
+			mg.insert(MochigomaKind::Fu, 9);
+			mg.insert(MochigomaKind::Kyou, 2);
+			mg.insert(MochigomaKind::Kei, 2);
+			mg.insert(MochigomaKind::Gin, 2);
+			mg.insert(MochigomaKind::Kin, 2);
+			mg.insert(MochigomaKind::Kaku, 1);
+			mg.insert(MochigomaKind::Hisha, 1);
+
+			let mut sou_count = 1;
+			let mut gou_count = 1;
+
+			for i in 0..9 {
+				let line_number = (i + '1' as u8) as char;
+
+				let mut chars = lines[i as usize].chars();
+
+				match chars.next() {
+					None => {
+						return Err(self.create_error());
+					},
+					Some(c) if c != 'P' => {
+						return Err(self.create_error());
+					},
+					_ => (),
+				}
+
+				match chars.next() {
+					None => {
+						return Err(self.create_error());
+					},
+					Some(c) if c != line_number => {
+						return Err(self.create_error());
+					},
+					_ => (),
+				}
+
+				for j in 0..9 {
+					match chars.next() {
+						None => {
+							return Err(self.create_error());
+						},
+						Some(c) if c == '+' || c == '-' => {
+							let teban = match c {
+								'+' => Teban::Sente,
+								'-' => Teban::Gote,
+								_ => {
+									return Err(self.create_error());
+								}
+							};
+
+							let mut kind = String::new();
+
+							for _ in 0..2 {
+								match chars.next() {
+									None => {
+										return Err(self.create_error());
+									},
+									Some(c) => {
+										kind.push(c);
+									}
+								}
+							}
+
+							if kind == "OU" {
+								match teban {
+									Teban::Sente => {
+										if sou_count == 1 {
+											sou_count -= 1;
+											initial_banmen[i as usize][j as usize] = SOu;
+										} else {
+											return Err(self.create_error());
+										}
+									},
+									Teban::Gote => {
+										if gou_count == 1 {
+											gou_count -= 1;
+											initial_banmen[i as usize][j as usize] = GOu;
+										} else {
+											return Err(self.create_error());
+										}
+									}
+								}
+							} else {
+								let k = match &*kind {
+									"Fu" => MochigomaKind::Fu,
+									"KY" => MochigomaKind::Kyou,
+									"KE" => MochigomaKind::Kei,
+									"GI" => MochigomaKind::Gin,
+									"KI" => MochigomaKind::Kin,
+									"KA" => MochigomaKind::Kaku,
+									"HI" => MochigomaKind::Hisha,
+									_ => {
+										return Err(self.create_error());
+									}
+								};
+
+								match teban {
+									Teban::Sente => {
+										let c = match ms.get(&k) {
+											None | Some(&0)=> {
+												return Err(self.create_error());
+											},
+											Some(c) => {
+												c - 1
+											}
+										};
+
+										ms.insert(k, c);
+									},
+									Teban::Gote => {
+										let c = match mg.get(&k) {
+											None | Some(&0)=> {
+												return Err(self.create_error());
+											},
+											Some(c) => {
+												c - 1
+											}
+										};
+
+										mg.insert(k, c);
+									}
+								}
+
+								initial_banmen[i as usize][j as usize] = KomaKind::from((teban,k));
+							}
+						},
+						_ => {
+							chars.next();
+							chars.next();
+						}
+					}
+				}
+			}
+
+			Ok((Banmen(initial_banmen),MochigomaCollections::Pair(ms,mg)))
+		} else if lines[0].starts_with("P+") || lines[0].starts_with("P-") {
+			let mut initial_banmen:[[KomaKind; 9]; 9] = [[KomaKind::Blank; 9]; 9];
+			let mut ms:HashMap<MochigomaKind,u32> = HashMap::new();
+			let mut mg:HashMap<MochigomaKind,u32> = HashMap::new();
+
+			ms.insert(MochigomaKind::Fu, 9);
+			ms.insert(MochigomaKind::Kyou, 2);
+			ms.insert(MochigomaKind::Kei, 2);
+			ms.insert(MochigomaKind::Gin, 2);
+			ms.insert(MochigomaKind::Kin, 2);
+			ms.insert(MochigomaKind::Kaku, 1);
+			ms.insert(MochigomaKind::Hisha, 1);
+
+			mg.insert(MochigomaKind::Fu, 9);
+			mg.insert(MochigomaKind::Kyou, 2);
+			mg.insert(MochigomaKind::Kei, 2);
+			mg.insert(MochigomaKind::Gin, 2);
+			mg.insert(MochigomaKind::Kin, 2);
+			mg.insert(MochigomaKind::Kaku, 1);
+			mg.insert(MochigomaKind::Hisha, 1);
+
+			let mut sou_count = 1;
+			let mut gou_count = 1;
+
+			for line in lines.into_iter() {
+				let teban = if line.starts_with("P+") {
+					Teban::Sente
+				} else if line.starts_with("P-") {
+					Teban::Gote
+				} else {
+					return Err(self.create_error());
+				};
+
+				let mut chars = line.chars();
+
+				chars.next();
+				chars.next();
+
+				while let Some(c) = chars.next() {
+					let x = c;
+
+					let y = match chars.next() {
+						None => {
+							return Err(self.create_error());
+						},
+						Some(y) => {
+							y
+						}
+					};
+
+					if x == '0' && y == '0' {
+						if chars.next() == Some('A') &&
+							chars.next() == Some('L') &&
+							chars.next() == None {
+
+							match teban {
+								Teban::Sente => {
+									for m in &MOCHIGOMA_KINDS {
+										let c = *mg.get(m).unwrap_or(&0);
+										mg.insert(*m, 0);
+										let c = *ms.get(m).unwrap_or(&0) + c;
+										ms.insert(*m,c);
+									}
+								},
+								Teban::Gote => {
+									for m in &MOCHIGOMA_KINDS {
+										let c = *ms.get(m).unwrap_or(&0);
+										ms.insert(*m, 0);
+										let c = *mg.get(m).unwrap_or(&0) + c;
+										mg.insert(*m,c);
+									}
+								}
+							}
+						} else {
+							return Err(self.create_error());
+						}
+					} else {
+						if x < '1' || x > '9' || y < '1' || y > '9' {
+							return Err(self.create_error());
+						}
+
+						let x = x as usize - '0' as usize;
+						let y = y as usize - '0' as usize;
+
+						let mut kind = String::new();
+
+						for _ in 0..2 {
+							match chars.next() {
+								None => {
+									return Err(self.create_error());
+								},
+								Some(c) => {
+									kind.push(c);
+								}
+							}
+						}
+
+						let k = initial_banmen[y as usize - 1][9 as usize - x];
+
+						if k != Blank {
+							return Err(self.create_error());
+						}
+
+						if kind == "OU" {
+							match teban {
+								Teban::Sente => {
+									if sou_count == 1 {
+										sou_count -= 1;
+										initial_banmen[y as usize][x as usize] = SOu;
+									} else {
+										return Err(self.create_error());
+									}
+								},
+								Teban::Gote => {
+									if gou_count == 1 {
+										gou_count -= 1;
+										initial_banmen[y as usize][x as usize] = GOu;
+									} else {
+										return Err(self.create_error());
+									}
+								}
+							}
+						} else {
+							let k = match &*kind {
+								"Fu" => MochigomaKind::Fu,
+								"KY" => MochigomaKind::Kyou,
+								"KE" => MochigomaKind::Kei,
+								"GI" => MochigomaKind::Gin,
+								"KI" => MochigomaKind::Kin,
+								"KA" => MochigomaKind::Kaku,
+								"HI" => MochigomaKind::Hisha,
+								_ => {
+									return Err(self.create_error());
+								}
+							};
+
+							match teban {
+								Teban::Sente => {
+									let c = match ms.get(&k) {
+										None | Some(&0)=> {
+											return Err(self.create_error());
+										},
+										Some(c) => {
+											c - 1
+										}
+									};
+
+									ms.insert(k, c);
+								},
+								Teban::Gote => {
+									let c = match mg.get(&k) {
+										None | Some(&0)=> {
+											return Err(self.create_error());
+										},
+										Some(c) => {
+											c - 1
+										}
+									};
+
+									mg.insert(k, c);
+								}
+							}
+
+							initial_banmen[y][x] = KomaKind::from((teban,k));
+						}
+					}
+				}
+			}
+
+			Ok((Banmen(initial_banmen),MochigomaCollections::Pair(ms,mg)))
+		} else {
+			Err(self.create_error())
+		}
 	}
 }
 #[derive(Clone, Copy, Eq, PartialOrd, PartialEq, Debug)]
