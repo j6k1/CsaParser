@@ -432,6 +432,55 @@ impl KifuInfo {
 		Ok(())
 	}
 }
+pub trait TryFromCsa<T> where Self: Sized {
+	fn try_from_csa(kind:T) -> Result<Self,CsaParserError>;
+}
+impl<'a> TryFromCsa<&'a String> for MochigomaKind {
+	fn try_from_csa(kind:&'a String) -> Result<Self,CsaParserError> {
+		Ok(match kind.as_str() {
+			"Fu" | "TO" => MochigomaKind::Fu,
+			"KY" | "NY" => MochigomaKind::Kyou,
+			"KE" | "NK" => MochigomaKind::Kei,
+			"GI" | "NG" => MochigomaKind::Gin,
+			"KI" => MochigomaKind::Kin,
+			"KA" | "UM" => MochigomaKind::Kaku,
+			"HI" | "RY" => MochigomaKind::Hisha,
+			_ => {
+				return Err(CsaParserError::FormatError(String::from(
+					"Invalid csa position format."
+				)));
+			}
+		})
+	}
+}
+impl<'a> TryFromCsa<(Teban,&'a String)> for KomaKind {
+	fn try_from_csa(s:(Teban,&'a String)) -> Result<Self,CsaParserError> {
+		let (teban,kind) = s;
+
+		Ok(match kind.as_str() {
+			"FU" | "KY" | "KE" | "GI" | "KI" | "KA" | "HI" => {
+				KomaKind::from((teban,MochigomaKind::try_from_csa(kind)?))
+			},
+			"TO" if teban == Teban::Sente => SFuN,
+			"TO" => GFuN,
+			"NY" if teban == Teban::Sente => SKyouN,
+			"NY" => GKyouN,
+			"NK" if teban == Teban::Sente => SKeiN,
+			"NK" => GKeiN,
+			"NG" if teban == Teban::Sente => SGinN,
+			"NG" => GGinN,
+			"UM" if teban == Teban::Sente => SKakuN,
+			"UM" => GKakuN,
+			"RY" if teban == Teban::Sente => SHishaN,
+			"RY" => GHishaN,
+			_ => {
+				return Err(CsaParserError::FormatError(String::from(
+					"Invalid csa position format."
+				)));
+			}
+		})
+	}
+}
 struct CsaPositionParser {
 
 }
@@ -448,43 +497,6 @@ impl CsaPositionParser {
 		))
 	}
 
-	fn create_mochigoma_kind(&self,s:&str) -> Result<MochigomaKind,CsaParserError> {
-		Ok(match s {
-			"Fu" | "TO" => MochigomaKind::Fu,
-			"KY" | "NY" => MochigomaKind::Kyou,
-			"KE" | "NK" => MochigomaKind::Kei,
-			"GI" | "NG" => MochigomaKind::Gin,
-			"KI" => MochigomaKind::Kin,
-			"KA" | "UM" => MochigomaKind::Kaku,
-			"HI" | "RY" => MochigomaKind::Hisha,
-			_ => {
-				return Err(self.create_error());
-			}
-		})
-	}
-
-	fn create_komakind(&self,teban:Teban,s:&str) -> Result<KomaKind,CsaParserError> {
-		Ok(match s {
-			"FU" | "KY" | "KE" | "GI" | "KI" | "KA" | "HI" => {
-				KomaKind::from((teban,self.create_mochigoma_kind(s)?))
-			},
-			"TO" if teban == Teban::Sente => SFuN,
-			"TO" => GFuN,
-			"NY" if teban == Teban::Sente => SKyouN,
-			"NY" => GKyouN,
-			"NK" if teban == Teban::Sente => SKeiN,
-			"NK" => GKeiN,
-			"NG" if teban == Teban::Sente => SGinN,
-			"NG" => GGinN,
-			"UM" if teban == Teban::Sente => SKakuN,
-			"UM" => GKakuN,
-			"RY" if teban == Teban::Sente => SHishaN,
-			"RY" => GHishaN,
-			_ => {
-				return Err(self.create_error());
-			}
-		})
-	}
 	pub fn parse(&mut self, lines:Vec<String>)
 		-> Result<(Banmen,MochigomaCollections),CsaParserError> {
 		if lines[0].starts_with("P1") {
@@ -653,7 +665,7 @@ impl CsaPositionParser {
 									}
 								}
 							} else {
-								let k = self.create_mochigoma_kind(&*kind)?;
+								let k = MochigomaKind::try_from_csa(&kind)?;
 
 								match teban {
 									Teban::Sente => {
@@ -682,7 +694,7 @@ impl CsaPositionParser {
 									}
 								}
 
-								initial_banmen[i as usize][j as usize] = self.create_komakind(teban,&*kind)?;
+								initial_banmen[i as usize][j as usize] = KomaKind::try_from_csa((teban,&kind))?;
 							}
 						},
 						_ => {
@@ -823,7 +835,7 @@ impl CsaPositionParser {
 								}
 							}
 						} else {
-							let k = self.create_mochigoma_kind(&*kind)?;
+							let k = MochigomaKind::try_from_csa(&kind)?;
 
 							match teban {
 								Teban::Sente => {
@@ -852,7 +864,7 @@ impl CsaPositionParser {
 								}
 							}
 
-							initial_banmen[y-1][9-x] = self.create_komakind(teban,&*kind)?;
+							initial_banmen[y-1][9-x] = KomaKind::try_from_csa((teban,&kind))?;
 						}
 					}
 				}
