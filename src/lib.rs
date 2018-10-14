@@ -887,7 +887,7 @@ impl CsaMovesParser {
 			)));
 		}
 
-		let teban = match &*lines[0] {
+		let mut teban = match &*lines[0] {
 			"+" => Teban::Sente,
 			"-" => Teban::Gote,
 			_ => {
@@ -1019,18 +1019,22 @@ impl CsaMovesParser {
 				banmen[dy-1][9-dx] = k;
 			}
 
-			if i < lines.len() - 1 && lines[i+1].starts_with("T") {
-				i += 1;
+			i += 1;
 
+			if i < lines.len() - 1 && lines[i].starts_with("T") {
 				let line = &lines[i];
 
 				let s = String::from(&line.as_str()[1..]);
 				let s:u32 = s.parse()?;
 
+				i += 1;
+
 				elapsed.push(Some(s));
 			} else {
 				elapsed.push(None);
 			}
+
+			teban = teban.opposite();
 		}
 
 		Ok((mvs,elapsed))
