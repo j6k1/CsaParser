@@ -588,22 +588,6 @@ impl CsaPositionParser {
 			let mut ms = Rule::create_initial_mochigoma_hashmap();
 			let mut mg = Rule::create_initial_mochigoma_hashmap();
 
-			ms.insert(MochigomaKind::Fu, 9);
-			ms.insert(MochigomaKind::Kyou, 2);
-			ms.insert(MochigomaKind::Kei, 2);
-			ms.insert(MochigomaKind::Gin, 2);
-			ms.insert(MochigomaKind::Kin, 2);
-			ms.insert(MochigomaKind::Kaku, 1);
-			ms.insert(MochigomaKind::Hisha, 1);
-
-			mg.insert(MochigomaKind::Fu, 9);
-			mg.insert(MochigomaKind::Kyou, 2);
-			mg.insert(MochigomaKind::Kei, 2);
-			mg.insert(MochigomaKind::Gin, 2);
-			mg.insert(MochigomaKind::Kin, 2);
-			mg.insert(MochigomaKind::Kaku, 1);
-			mg.insert(MochigomaKind::Hisha, 1);
-
 			let mut sou_count = 1;
 			let mut gou_count = 1;
 
