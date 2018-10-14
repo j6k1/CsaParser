@@ -117,6 +117,7 @@ impl<S> CsaParser<S> where S: CsaStream {
 			if line.starts_with("V") && stage == Stage::Initial {
 				stage = Stage::Version;
 				version = Some(line.clone());
+				current = self.read_next(&mut comments)?;
 			} else if (line.starts_with("N+") || line.starts_with("N-") ||
 						line.starts_with("$")) && stage == Stage::Version {
 				stage = Stage::Info;
@@ -128,18 +129,51 @@ impl<S> CsaParser<S> where S: CsaStream {
 				if let Some(ref mut info) = info {
 					info.parse(&line)?;
 				}
+				current = self.read_next(&mut comments)?;
 			} else if line.starts_with("PI") && stage >= Stage::Version && stage <= Stage::Info {
 				stage = Stage::Position;
-			} else if line.starts_with("P1") && stage >= Stage::Version && stage <= Stage::Info {
+				let (b,m) = CsaPositionParser::new().parse(vec![line.clone()])?;
+				banmen = b;
+				mc = m;
+				current = self.read_next(&mut comments)?;
+			} else if (line.starts_with("P1") ||
+						line.starts_with("P+") ||
+						line.starts_with("P-")) &&
+							stage >= Stage::Version && stage <= Stage::Info {
 				stage = Stage::Position;
-			} else if (line.starts_with("P+") || line.starts_with("P-")) &&
-						 stage >= Stage::Version && stage <= Stage::Info {
-				stage = Stage::Position;
+
+				let mut lines:Vec<String> = Vec::new();
+
+				let mut l = line;
+				lines.push(l.clone());
+
+				current = self.read_next(&mut comments)?;
+
+				while l.starts_with("P") {
+					lines.push(l.clone());
+
+					current = self.read_next(&mut comments)?;
+
+					l = match current {
+						Some(ref l) => {
+							l.clone()
+						},
+						None => {
+							break;
+						}
+					};
+				}
+
+				let (b,m) = CsaPositionParser::new().parse(lines)?;
+				banmen = b;
+				mc = m;
 			} else if (line == "+" || line == "-") && stage == Stage::Position {
 				stage = Stage::Moves;
+				current = self.read_next(&mut comments)?;
 			} else if line.starts_with("%") && stage >= Stage::Position {
 				stage = Stage::EndState;
 				end_state = Some(EndState::try_from(line.to_string())?);
+				current = self.read_next(&mut comments)?;
 			} else if line == "/" && stage >= Stage::Position {
 				stage = Stage::Initial;
 
@@ -159,11 +193,10 @@ impl<S> CsaParser<S> where S: CsaStream {
 				elapsed = Vec::new();
 				end_state = None;
 				comments = Vec::new();
+				current = self.read_next(&mut comments)?;
 			} else {
 				return Err(CsaParserError::FormatError(String::from("Invalid csa format.")));
 			}
-
-			current = self.read_next(&mut comments)?;
 		}
 
 		if stage >= Stage::Position {
@@ -373,13 +406,19 @@ struct CsaPositionParser {
 
 }
 impl CsaPositionParser {
+	pub fn new() -> CsaPositionParser {
+		CsaPositionParser {
+
+		}
+	}
+
 	fn create_error(&self) -> CsaParserError {
 		CsaParserError::FormatError(String::from(
 			"Invalid csa position format."
 		))
 	}
 
-	pub fn parse(&mut self, lines:&Vec<String>) -> Result<(Banmen,MochigomaCollections),CsaParserError> {
+	pub fn parse(&mut self, lines:Vec<String>) -> Result<(Banmen,MochigomaCollections),CsaParserError> {
 		if lines[0].starts_with("P1") {
 			let initial_banmen = BANMEN_START_POS.clone();
 			let mut initial_banmen = initial_banmen.0;
@@ -622,7 +661,9 @@ impl CsaPositionParser {
 			let mut sou_count = 1;
 			let mut gou_count = 1;
 
-			for line in lines.into_iter() {
+			for i in 0..lines.len() {
+				let line = &lines[i];
+
 				let teban = if line.starts_with("P+") {
 					Teban::Sente
 				} else if line.starts_with("P-") {
@@ -649,6 +690,10 @@ impl CsaPositionParser {
 					};
 
 					if x == '0' && y == '0' {
+						if i < lines.len() - 1 {
+							return Err(self.create_error());
+						}
+
 						if chars.next() == Some('A') &&
 							chars.next() == Some('L') &&
 							chars.next() == None {
@@ -695,7 +740,7 @@ impl CsaPositionParser {
 							}
 						}
 
-						let k = initial_banmen[y as usize - 1][9 as usize - x];
+						let k = initial_banmen[y-1][9-x];
 
 						if k != Blank {
 							return Err(self.create_error());
@@ -706,7 +751,7 @@ impl CsaPositionParser {
 								Teban::Sente => {
 									if sou_count == 1 {
 										sou_count -= 1;
-										initial_banmen[y as usize][x as usize] = SOu;
+										initial_banmen[y-1][9-x] = SOu;
 									} else {
 										return Err(self.create_error());
 									}
@@ -714,7 +759,7 @@ impl CsaPositionParser {
 								Teban::Gote => {
 									if gou_count == 1 {
 										gou_count -= 1;
-										initial_banmen[y as usize][x as usize] = GOu;
+										initial_banmen[y-1][9-x] = GOu;
 									} else {
 										return Err(self.create_error());
 									}
@@ -761,7 +806,7 @@ impl CsaPositionParser {
 								}
 							}
 
-							initial_banmen[y][x] = KomaKind::from((teban,k));
+							initial_banmen[y-1][9-x] = KomaKind::from((teban,k));
 						}
 					}
 				}
