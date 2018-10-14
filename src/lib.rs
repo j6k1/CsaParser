@@ -227,7 +227,33 @@ impl<S> CsaParser<S> where S: CsaStream {
 				mc = m;
 			} else if (line == "+" || line == "-") && stage == Stage::Position {
 				stage = Stage::Moves;
+
+				let mut lines:Vec<String> = Vec::new();
+
+				let mut l = line;
+				lines.push(l.clone());
+
 				current = self.read_next(&mut comments)?;
+
+				while l.starts_with("+") || l.starts_with("-") || l.starts_with("T") {
+					lines.push(l.clone());
+
+					current = self.read_next(&mut comments)?;
+
+					l = match current {
+						Some(ref l) => {
+							l.clone()
+						},
+						None => {
+							break;
+						}
+					};
+				}
+
+				let (m,e) = CsaMovesParser::new().parse(lines,&banmen)?;
+
+				mvs = m;
+				elapsed = e;
 			} else if line.starts_with("%") && stage >= Stage::Position {
 				stage = Stage::EndState;
 				end_state = Some(EndState::try_from_csa(&line.to_string())?);
@@ -836,7 +862,6 @@ impl CsaPositionParser {
 		}
 	}
 }
-/*
 struct CsaMovesParser {
 
 }
@@ -847,7 +872,13 @@ impl CsaMovesParser {
 		}
 	}
 
-	pub fn parse(&mut self, lines:Vec<String>)
+	fn create_error(&self) -> CsaParserError {
+		CsaParserError::FormatError(String::from(
+			"Invalid csa moves format."
+		))
+	}
+
+	pub fn parse(&mut self, lines:Vec<String>,banmen:&Banmen)
 		-> Result<(Vec<Move>,Vec<Option<u32>>),CsaParserError> {
 
 		if lines.len() == 0 {
@@ -864,12 +895,25 @@ impl CsaMovesParser {
 			}
 		};
 
-		for line in lines.into_iter().skip(1) {
+		let mut banmen = match banmen {
+			Banmen(ref kinds) => kinds.clone()
+		};
+
+		let mut mvs:Vec<Move> = Vec::new();
+		let mut elapsed:Vec<Option<u32>> = Vec::new();
+
+		let mut reader = CsaStringReader::new();
+
+		let mut i = 1;
+
+		while i < lines.len() {
+			let line = &lines[i];
+
 			match teban {
-				Teban::Sente if !lines.starts_with("+") => {
+				Teban::Sente if !line.starts_with("+") => {
 					return Err(self.create_error());
 				},
-				Teban::Gote if !lines.starts_with("-") => {
+				Teban::Gote if !line.starts_with("-") => {
 					return Err(self.create_error());
 				},
 				_ => ()
@@ -898,10 +942,6 @@ impl CsaMovesParser {
 				}
 			};
 
-			if sx < 1 || sx > 9 || sy < 1 || sy > 9 {
-				return Err(self.create_error());
-			}
-
 			let (dx,dy) = match chars.next() {
 				None => {
 					return Err(self.create_error());
@@ -922,28 +962,80 @@ impl CsaMovesParser {
 				}
 			};
 
-			if dx < 1 || dx > 9 || dy < 1 || dy > 9 {
-				return Err(self.create_error());
-			}
+			let kind = reader.read(&mut chars, 2)?;
 
-			let mut kind = String::new();
+			if sx == 0 && sy == 0 && dx >= 1 && dx <= 9 && dy >= 1 && dy <= 9 {
+				let k = MochigomaKind::try_from_csa(&kind)?;
 
-			for _ in 0..2 {
-				match chars.next() {
-					None => {
-						return Err(self.create_error());
-					},
-					Some(c) => {
-						kind.push(c);
-					}
+				mvs.push(Move::Put(k,KomaDstPutPosition(dx,dy)));
+
+				let dx = dx as usize;
+				let dy = dy as usize;
+				banmen[dy-1][9-dx] = KomaKind::from((teban,k));
+			} else {
+				if sx < 1 || sx > 9 || sy < 1 || sy > 9 {
+					return Err(self.create_error());
 				}
+
+				if dx < 1 || dx > 9 || dy < 1 || dy > 9 {
+					return Err(self.create_error());
+				}
+
+				let k = KomaKind::try_from_csa((teban,&kind))?;
+
+				let sx = sx as usize;
+				let sy = sy as usize;
+				let dx = dx as usize;
+				let dy = dy as usize;
+
+				let n = match k {
+					SFuN |
+						SKyouN |
+						SKeiN |
+						SGinN |
+						SKakuN |
+						SHishaN if banmen[sy-1][9-sx] != k => {
+
+						true
+					},
+					GFuN |
+						GKyouN |
+						GKeiN |
+						GGinN |
+						GKakuN |
+						GHishaN if banmen[sy-1][9-sx] != k => {
+
+						true
+					},
+					_ => false,
+				};
+
+				mvs.push(Move::To(
+					KomaSrcPosition(sx as u32,sy as u32),
+					KomaDstToPosition(dx as u32,dy as u32,n)
+				));
+
+				banmen[sy-1][9-sx] = Blank;
+				banmen[dy-1][9-dx] = k;
 			}
 
+			if i < lines.len() - 1 && lines[i+1].starts_with("T") {
+				i += 1;
 
+				let line = &lines[i];
+
+				let s = String::from(&line.as_str()[1..]);
+				let s:u32 = s.parse()?;
+
+				elapsed.push(Some(s));
+			} else {
+				elapsed.push(None);
+			}
 		}
+
+		Ok((mvs,elapsed))
 	}
 }
-*/
 #[derive(Clone, Copy, Eq, PartialOrd, PartialEq, Debug)]
 pub enum EndState {
 	Toryo = 0, // 投了
