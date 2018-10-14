@@ -48,7 +48,7 @@ use error::*;
 
 pub trait CsaStream {
 	fn next(&mut self) -> Result<Option<String>,CsaStreamReadError>;
-	fn read_real_line(&self,l:String) -> Vec<String> {
+	fn read_real_line(l:String) -> Vec<String> {
 		if l.starts_with('\'') {
 			vec![String::from(&l.as_str()[1..])]
 		} else {
@@ -74,7 +74,7 @@ impl CsaFileStream {
 		let lines = if n == 0 {
 			None
 		} else {
-			Some(vec![buf])
+			Some(CsaFileStream::read_real_line(buf))
 		};
 
 		Ok(CsaFileStream {
@@ -82,6 +82,36 @@ impl CsaFileStream {
 			lines:lines,
 			current_pos:0,
 		})
+	}
+}
+impl CsaStream for CsaFileStream {
+	fn next(&mut self) -> Result<Option<String>,CsaStreamReadError> {
+		let read_next = match self.lines {
+			Some(ref lines) if self.current_pos >= lines.len() as u32 => true,
+			_ => false,
+		};
+
+		if read_next {
+			self.current_pos = 0;
+
+			let mut buf = String::new();
+			let n = self.reader.read_line(&mut buf)?;
+
+			if n == 0 {
+				self.lines = None;
+			} else {
+				self.lines = Some(CsaFileStream::read_real_line(buf));
+			}
+		}
+
+		match self.lines {
+			None => Ok(None),
+			Some(ref lines) => {
+				let p = self.current_pos;
+				self.current_pos += 1;
+				Ok(Some(lines[p as usize].clone()))
+			}
+		}
 	}
 }
 pub struct CsaStringReader {
@@ -111,36 +141,6 @@ impl CsaStringReader {
 		}
 
 		Ok(s)
-	}
-}
-impl CsaStream for CsaFileStream {
-	fn next(&mut self) -> Result<Option<String>,CsaStreamReadError> {
-		let read_next = match self.lines {
-			Some(ref lines) if self.current_pos >= lines.len() as u32 => true,
-			_ => false,
-		};
-
-		if read_next {
-			self.current_pos = 0;
-
-			let mut buf = String::new();
-			let n = self.reader.read_line(&mut buf)?;
-
-			if n == 0 {
-				self.lines = None;
-			} else {
-				self.lines = Some(self.read_real_line(buf));
-			}
-		}
-
-		match self.lines {
-			None => Ok(None),
-			Some(ref lines) => {
-				let p = self.current_pos;
-				self.current_pos += 1;
-				Ok(Some(lines[p as usize].clone()))
-			}
-		}
 	}
 }
 pub struct CsaParser<S> where S: CsaStream {
