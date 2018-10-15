@@ -85,7 +85,7 @@ dependencies = [
 [[package]]
 name = "usiagent"
 version = "0.1.0"
-source = "git+https://github.com/j6k1/USIAgent.git#d4b93ee1aa6835960fed39e866ed4ac21939252c"
+source = "git+https://github.com/j6k1/USIAgent.git#3a19adb44b61af972801c845b67a23f9dd4c9c3a"
 dependencies = [
  "chrono 0.4.6 (registry+https://github.com/rust-lang/crates.io-index)",
  "queuingtask 0.1.0 (git+https://github.com/j6k1/queuingtask.git)",

@@ -610,8 +610,8 @@ impl CsaPositionParser {
 			Ok((Banmen(initial_banmen),MochigomaCollections::Empty))
 		} else if lines[0].starts_with("P1") {
 			let mut initial_banmen:[[KomaKind; 9]; 9] = [[KomaKind::Blank; 9]; 9];
-			let mut ms = Rule::create_initial_mochigoma_hashmap();
-			let mut mg = Rule::create_initial_mochigoma_hashmap();
+			let mut ms = Rule::filled_mochigoma_hashmap();
+			let mut mg = Rule::filled_mochigoma_hashmap();
 
 			let mut sou_count = 1;
 			let mut gou_count = 1;
@@ -720,8 +720,8 @@ impl CsaPositionParser {
 			Ok((Banmen(initial_banmen),MochigomaCollections::Pair(ms,mg)))
 		} else if lines[0].starts_with("P+") || lines[0].starts_with("P-") {
 			let mut initial_banmen:[[KomaKind; 9]; 9] = [[KomaKind::Blank; 9]; 9];
-			let mut ms = Rule::create_initial_mochigoma_hashmap();
-			let mut mg = Rule::create_initial_mochigoma_hashmap();
+			let mut ms = Rule::filled_mochigoma_hashmap();
+			let mut mg = Rule::filled_mochigoma_hashmap();
 
 			let mut sou_count = 1;
 			let mut gou_count = 1;
