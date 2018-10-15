@@ -13,35 +13,35 @@ use std::str::Chars;
 
 use usiagent::shogi::*;
 use usiagent::shogi::KomaKind::{
-						SFu,
-						SKyou,
-						SKei,
-						SGin,
-						SKin,
-						SKaku,
-						SHisha,
-						SOu,
-						SFuN,
-						SKyouN,
-						SKeiN,
-						SGinN,
-						SKakuN,
-						SHishaN,
-						GFu,
-						GKyou,
-						GKei,
-						GGin,
-						GKin,
-						GKaku,
-						GHisha,
-						GOu,
-						GFuN,
-						GKyouN,
-						GKeiN,
-						GGinN,
-						GKakuN,
-						GHishaN,
-						Blank
+	SFu,
+	SKyou,
+	SKei,
+	SGin,
+	SKin,
+	SKaku,
+	SHisha,
+	SOu,
+	SFuN,
+	SKyouN,
+	SKeiN,
+	SGinN,
+	SKakuN,
+	SHishaN,
+	GFu,
+	GKyou,
+	GKei,
+	GGin,
+	GKin,
+	GKaku,
+	GHisha,
+	GOu,
+	GFuN,
+	GKyouN,
+	GKeiN,
+	GGinN,
+	GKakuN,
+	GHishaN,
+	Blank
 };
 use usiagent::rule::*;
 
@@ -51,7 +51,7 @@ pub trait CsaStream {
 	fn next(&mut self) -> Result<Option<String>,CsaStreamReadError>;
 	fn read_real_line(l:String) -> Vec<String> {
 		if l.starts_with('\'') {
-			vec![String::from(&l.as_str()[1..])]
+			vec![l]
 		} else {
 			l.split(",").collect::<Vec<&str>>()
 									.into_iter()
@@ -175,7 +175,7 @@ impl<S> CsaParser<S> where S: CsaStream {
 		while let Some(line) = current {
 			if line.starts_with("V") && stage == Stage::Initial {
 				stage = Stage::Version;
-				version = Some(line.clone());
+				version = Some(String::from(&line.as_str()[1..]));
 				current = self.read_next(&mut comments)?;
 			} else if (line.starts_with("N+") || line.starts_with("N-") ||
 						line.starts_with("$")) && stage == Stage::Version {
@@ -393,48 +393,50 @@ impl KifuInfo {
 			let mut chars = t.chars();
 
 			let hh = reader.read(&mut chars, 2)?;
-			let mm = reader.read(&mut chars, 2)?;
 
-			let h:u32 = hh.parse()?;
-			let m:u32 = mm.parse()?;
 
 			let delimiter = chars.next();
 
-			let s = if let Some(c) = delimiter {
+			if let None = delimiter {
+				return Err(CsaParserError::FormatError(String::from(
+					"Invalid csa info format of timelimit."
+				)));
+			}
+
+			if let Some(c) = delimiter {
 				if c != ':' {
 					return Err(CsaParserError::FormatError(String::from(
 						"Invalid csa info format of timelimit."
 					)));
 				}
+			}
 
-				match chars.next() {
-					None => {
-						return Err(CsaParserError::FormatError(String::from(
-							"Invalid csa info format of timelimit."
-						)));
-					},
-					Some('+') => {
-						let ss = reader.read(&mut chars, 2)?;
+			let mm = reader.read(&mut chars, 2)?;
 
-						let s = ss.parse()?;
+			let h:u32 = hh.parse()?;
+			let m:u32 = mm.parse()?;
 
-						match chars.next() {
-							None => Some(s),
-							Some(_) => {
-								return Err(CsaParserError::FormatError(String::from(
-									"Invalid csa info format of timelimit."
-								)));
-							}
+			let s = match chars.next() {
+				None => None,
+				Some('+') => {
+					let ss = reader.read(&mut chars, 2)?;
+
+					let s = ss.parse()?;
+
+					match chars.next() {
+						None => Some(s),
+						Some(_) => {
+							return Err(CsaParserError::FormatError(String::from(
+								"Invalid csa info format of timelimit."
+							)));
 						}
-					},
-					_ => {
-						return Err(CsaParserError::FormatError(String::from(
-							"Invalid csa info format of timelimit."
-						)));
 					}
+				},
+				_ => {
+					return Err(CsaParserError::FormatError(String::from(
+						"Invalid csa info format of timelimit."
+					)));
 				}
-			} else {
-				None
 			};
 
 			self.time_limit = Some((h * 60 + m, s));
@@ -550,7 +552,7 @@ impl CsaPositionParser {
 
 		let mut reader = CsaStringReader::new();
 
-		if lines[0].starts_with("P1") {
+		if lines[0].starts_with("PI") {
 			let initial_banmen = BANMEN_START_POS.clone();
 			let mut initial_banmen = initial_banmen.0;
 			let mut chars = lines[0].chars();
@@ -905,8 +907,9 @@ impl CsaMovesParser {
 		let mut reader = CsaStringReader::new();
 
 		let mut i = 1;
+		let len = lines.len();
 
-		while i < lines.len() {
+		while i < len {
 			let line = &lines[i];
 
 			match teban {
@@ -1021,7 +1024,7 @@ impl CsaMovesParser {
 
 			i += 1;
 
-			if i < lines.len() - 1 && lines[i].starts_with("T") {
+			if i < len - 1 && lines[i].starts_with("T") {
 				let line = &lines[i];
 
 				let s = String::from(&line.as_str()[1..]);
