@@ -7,6 +7,7 @@ use std::io::BufReader;
 use std::io::BufRead;
 use std::fs::File;
 use std::fs::OpenOptions;
+use std::path::Path;
 use std::collections::HashMap;
 use std::str::Chars;
 
@@ -64,7 +65,7 @@ pub struct CsaFileStream {
 	current_pos:u32,
 }
 impl CsaFileStream {
-	pub fn new(file:&str) -> Result<CsaFileStream,io::Error> {
+	pub fn new<P>(file:P) -> Result<CsaFileStream,io::Error> where P: AsRef<Path> {
 		let mut reader = BufReader::new(OpenOptions::new().read(true).create(false).open(file)?);
 		let mut buf = String::new();
 		let n = reader.read_line(&mut buf)?;
