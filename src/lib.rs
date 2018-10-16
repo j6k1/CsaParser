@@ -109,9 +109,21 @@ impl CsaStream for CsaFileStream {
 		match self.lines {
 			None => Ok(None),
 			Some(ref lines) => {
-				let p = self.current_pos;
+				let len = lines.len();
+
+				let mut p = self.current_pos;
 				self.current_pos += 1;
-				Ok(Some(lines[p as usize].clone()))
+
+				while (p as usize) < len && lines[p as usize] == "" {
+					p = self.current_pos;
+					self.current_pos += 1;
+				}
+
+				if (p as usize) < len {
+					Ok(Some(lines[p as usize].clone()))
+				} else {
+					Ok(None)
+				}
 			}
 		}
 	}
