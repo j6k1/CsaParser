@@ -154,6 +154,38 @@ impl<S> CsaParser<S> where S: CsaStream {
 		}
 	}
 
+	fn read_next_lines<F>(&mut self,lines:&mut Vec<String>, comments:&mut Vec<String>,cond:F)
+		-> Result<Option<String>,CsaStreamReadError> where F: Fn(&String) -> bool {
+
+		let mut current = self.read_next(comments)?;
+
+		let mut l = match current {
+			Some(ref l) => {
+				l.clone()
+			},
+			None => {
+				return Ok(current);
+			}
+		};
+
+		while cond(&l) {
+			lines.push(l.clone());
+
+			current = self.read_next(comments)?;
+
+			l = match current {
+				Some(ref l) => {
+					l.clone()
+				},
+				None => {
+					break;
+				}
+			};
+		}
+
+		Ok(current)
+	}
+
 	pub fn parse(&mut self) -> Result<Vec<CsaData>,CsaParserError> {
 		let mut results:Vec<CsaData> = Vec::new();
 		let mut comments:Vec<String> = Vec::new();
@@ -177,8 +209,10 @@ impl<S> CsaParser<S> where S: CsaStream {
 				stage = Stage::Version;
 				version = Some(String::from(&line.as_str()[1..]));
 				current = self.read_next(&mut comments)?;
-			} else if (line.starts_with("N+") || line.starts_with("N-") ||
-						line.starts_with("$")) && stage == Stage::Version {
+			} else if (line.starts_with("N+") ||
+						line.starts_with("N-") ||
+						line.starts_with("$")) &&
+						(stage == Stage::Version || stage == Stage::Info) {
 				stage = Stage::Info;
 
 				if let None = info {
@@ -206,22 +240,9 @@ impl<S> CsaParser<S> where S: CsaStream {
 				let mut l = line;
 				lines.push(l.clone());
 
-				current = self.read_next(&mut comments)?;
-
-				while l.starts_with("P") {
-					lines.push(l.clone());
-
-					current = self.read_next(&mut comments)?;
-
-					l = match current {
-						Some(ref l) => {
-							l.clone()
-						},
-						None => {
-							break;
-						}
-					};
-				}
+				current = self.read_next_lines(&mut lines,&mut comments,|s| {
+					s.starts_with("P")
+				})?;
 
 				let (b,m) = CsaPositionParser::new().parse(lines)?;
 				banmen = b;
@@ -234,22 +255,9 @@ impl<S> CsaParser<S> where S: CsaStream {
 				let mut l = line;
 				lines.push(l.clone());
 
-				current = self.read_next(&mut comments)?;
-
-				while l.starts_with("+") || l.starts_with("-") || l.starts_with("T") {
-					lines.push(l.clone());
-
-					current = self.read_next(&mut comments)?;
-
-					l = match current {
-						Some(ref l) => {
-							l.clone()
-						},
-						None => {
-							break;
-						}
-					};
-				}
+				current = self.read_next_lines(&mut lines,&mut comments,|s| {
+					s.starts_with("+") || s.starts_with("-") || s.starts_with("T")
+				})?;
 
 				let (m,e) = CsaMovesParser::new().parse(lines,&banmen)?;
 
