@@ -97,6 +97,7 @@ impl CsaStream for CsaFileStream {
 
 			let mut buf = String::new();
 			let n = self.reader.read_line(&mut buf)?;
+			buf = buf.trim_right().to_string();
 
 			if n == 0 {
 				self.lines = None;
