@@ -96,8 +96,14 @@ impl CsaStream for CsaFileStream {
 			self.current_pos = 0;
 
 			let mut buf = String::new();
-			let n = self.reader.read_line(&mut buf)?;
+			let mut n = self.reader.read_line(&mut buf)?;
 			buf = buf.trim_right().to_string();
+
+			while n > 0 && buf == "" {
+				buf.clear();
+				n = self.reader.read_line(&mut buf)?;
+				buf = buf.trim_right().to_string();
+			}
 
 			if n == 0 {
 				self.lines = None;
@@ -109,21 +115,9 @@ impl CsaStream for CsaFileStream {
 		match self.lines {
 			None => Ok(None),
 			Some(ref lines) => {
-				let len = lines.len();
-
-				let mut p = self.current_pos;
+				let p = self.current_pos;
 				self.current_pos += 1;
-
-				while (p as usize) < len && lines[p as usize] == "" {
-					p = self.current_pos;
-					self.current_pos += 1;
-				}
-
-				if (p as usize) < len {
-					Ok(Some(lines[p as usize].clone()))
-				} else {
-					Ok(None)
-				}
+				Ok(Some(lines[p as usize].clone()))
 			}
 		}
 	}
