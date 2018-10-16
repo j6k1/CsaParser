@@ -1035,7 +1035,7 @@ impl CsaMovesParser {
 
 			i += 1;
 
-			if i < len - 1 && lines[i].starts_with("T") {
+			if i < len && lines[i].starts_with("T") {
 				let line = &lines[i];
 
 				let s = String::from(&line.as_str()[1..]);
