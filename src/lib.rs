@@ -489,6 +489,8 @@ impl<'a> TryFromCsa<(Teban,&'a String)> for KomaKind {
 			"FU" | "KY" | "KE" | "GI" | "KI" | "KA" | "HI" => {
 				KomaKind::from((teban,MochigomaKind::try_from_csa(kind)?))
 			},
+			"OU" if teban == Teban::Sente => SOu,
+			"OU" => GOu,
 			"TO" if teban == Teban::Sente => SFuN,
 			"TO" => GFuN,
 			"NY" if teban == Teban::Sente => SKyouN,
