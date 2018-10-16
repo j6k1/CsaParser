@@ -465,7 +465,7 @@ pub trait TryFromCsa<T> where Self: Sized {
 impl<'a> TryFromCsa<&'a String> for MochigomaKind {
 	fn try_from_csa(kind:&'a String) -> Result<MochigomaKind,CsaParserError> {
 		Ok(match kind.as_str() {
-			"Fu" | "TO" => MochigomaKind::Fu,
+			"FU" | "TO" => MochigomaKind::Fu,
 			"KY" | "NY" => MochigomaKind::Kyou,
 			"KE" | "NK" => MochigomaKind::Kei,
 			"GI" | "NG" => MochigomaKind::Gin,
