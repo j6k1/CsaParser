@@ -1049,29 +1049,28 @@ impl CsaMovesParser {
 				}
 
 				i += 1;
-
-				if i < len && lines[i].starts_with("T") {
-					let line = &lines[i];
-
-					let s = String::from(&line.as_str()[1..]);
-					let s:u32 = s.parse()?;
-
-					i += 1;
-
-					elapsed.push(Some(s));
-				} else {
-					elapsed.push(None);
-				}
-
-				teban = teban.opposite();
 			} else if line.starts_with("%") {
 				end_state = Some(EndState::try_from_csa(line)?);
 				i += 1;
 			} else {
 				return Err(self.create_error());
 			}
-		}
 
+			if i < len && lines[i].starts_with("T") {
+				let line = &lines[i];
+
+				let s = String::from(&line.as_str()[1..]);
+				let s:u32 = s.parse()?;
+
+				i += 1;
+
+				elapsed.push(Some(s));
+			} else {
+				elapsed.push(None);
+			}
+
+			teban = teban.opposite();
+		}
 		Ok((mvs,elapsed,end_state))
 	}
 }
