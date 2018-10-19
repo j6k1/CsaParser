@@ -10,6 +10,8 @@ use std::fs::OpenOptions;
 use std::path::Path;
 use std::collections::HashMap;
 use std::str::Chars;
+use std::slice::Iter;
+use std::ops::Index;
 
 use usiagent::shogi::*;
 use usiagent::shogi::KomaKind::{
@@ -207,7 +209,7 @@ impl<S> CsaParser<S> where S: CsaStream {
 		let msente:HashMap<MochigomaKind,u32> = HashMap::new();
 		let mgote:HashMap<MochigomaKind,u32> = HashMap::new();
 		let mut mc = MochigomaCollections::Pair(msente,mgote);
-		let mut mvs:Vec<Move> = Vec::new();
+		let mut mvs:CsaMoves = CsaMoves::new();
 		let mut elapsed:Vec<Option<u32>> = Vec::new();
 		let mut end_state = None;
 
@@ -263,17 +265,14 @@ impl<S> CsaParser<S> where S: CsaStream {
 				lines.push(l.clone());
 
 				current = self.read_next_lines(&mut lines,&mut comments,|s| {
-					s.starts_with("+") || s.starts_with("-") || s.starts_with("T")
+					s.starts_with("+") || s.starts_with("-") || s.starts_with("T") || s.starts_with("%")
 				})?;
 
-				let (m,e) = CsaMovesParser::new().parse(lines,&banmen)?;
+				let (m,e,s) = CsaMovesParser::new().parse(lines,&banmen)?;
 
 				mvs = m;
 				elapsed = e;
-			} else if line.starts_with("%") && stage >= Stage::Position {
-				stage = Stage::EndState;
-				end_state = Some(EndState::try_from_csa(&line.to_string())?);
-				current = self.read_next(&mut comments)?;
+				end_state = s;
 			} else if line == "/" && stage >= Stage::Position {
 				stage = Stage::Initial;
 
@@ -289,7 +288,7 @@ impl<S> CsaParser<S> where S: CsaStream {
 				info = None;
 				banmen = Banmen([[KomaKind::Blank; 9]; 9]);
 				mc = MochigomaCollections::Pair(HashMap::new(),HashMap::new());
-				mvs = Vec::new();
+				mvs = CsaMoves::new();
 				elapsed = Vec::new();
 				end_state = None;
 				comments = Vec::new();
@@ -330,7 +329,6 @@ enum Stage {
 	Info,
 	Position,
 	Moves,
-	EndState,
 }
 #[derive(Debug)]
 pub struct CsaData {
@@ -338,7 +336,7 @@ pub struct CsaData {
 	pub kifu_info:Option<KifuInfo>,
 	pub initial_position:Banmen,
 	pub initial_mochigoma:MochigomaCollections,
-	pub moves:Vec<Move>,
+	pub moves:CsaMoves,
 	pub elapsed:Vec<Option<u32>>,
 	pub end_state:Option<EndState>,
 	pub comments:Vec<String>,
@@ -348,7 +346,7 @@ impl CsaData {
 				kifu_info:Option<KifuInfo>,
 				banmen:Banmen,
 				mochigoma:MochigomaCollections,
-				mvs:Vec<Move>, elapsed:Vec<Option<u32>>,
+				mvs:CsaMoves, elapsed:Vec<Option<u32>>,
 				end_state:Option<EndState>,
 				comments:Vec<String>) -> CsaData {
 		CsaData {
@@ -898,7 +896,7 @@ impl CsaMovesParser {
 	}
 
 	pub fn parse(&mut self, lines:Vec<String>,banmen:&Banmen)
-		-> Result<(Vec<Move>,Vec<Option<u32>>),CsaParserError> {
+		-> Result<(CsaMoves,Vec<Option<u32>>,Option<EndState>),CsaParserError> {
 
 		if lines.len() == 0 {
 			return Err(CsaParserError::InvalidStateError(String::from(
@@ -918,146 +916,226 @@ impl CsaMovesParser {
 			Banmen(ref kinds) => kinds.clone()
 		};
 
-		let mut mvs:Vec<Move> = Vec::new();
+		let mut mvs:CsaMoves = CsaMoves::new();
 		let mut elapsed:Vec<Option<u32>> = Vec::new();
 
 		let mut reader = CsaStringReader::new();
 
 		let mut i = 1;
 		let len = lines.len();
+		let mut moveend = false;
+		let mut end_state = None;
 
 		while i < len {
 			let line = &lines[i];
 
-			match teban {
-				Teban::Sente if !line.starts_with("+") => {
-					return Err(self.create_error());
-				},
-				Teban::Gote if !line.starts_with("-") => {
-					return Err(self.create_error());
-				},
-				_ => ()
-			}
-
-			let mut chars = line.chars();
-			chars.next();
-
-			let (sx,sy) = match chars.next() {
-				None => {
-					return Err(self.create_error());
-				},
-				Some(sx) => {
-					let sx = sx as u32 - '0' as u32;
-
-					let sy = match chars.next() {
-						None => {
-							return Err(self.create_error());
-						},
-						Some(sy) => {
-							sy as u32 - '0' as u32
-						}
-					};
-
-					(sx,sy)
-				}
-			};
-
-			let (dx,dy) = match chars.next() {
-				None => {
-					return Err(self.create_error());
-				},
-				Some(dx) => {
-					let dx = dx as u32 - '0' as u32;
-
-					let dy = match chars.next() {
-						None => {
-							return Err(self.create_error());
-						},
-						Some(dy) => {
-							dy as u32 - '0' as u32
-						}
-					};
-
-					(dx,dy)
-				}
-			};
-
-			let kind = reader.read(&mut chars, 2)?;
-
-			if sx == 0 && sy == 0 && dx >= 1 && dx <= 9 && dy >= 1 && dy <= 9 {
-				let k = MochigomaKind::try_from_csa(&kind)?;
-
-				mvs.push(Move::Put(k,KomaDstPutPosition(dx,dy)));
-
-				let dx = dx as usize;
-				let dy = dy as usize;
-				banmen[dy-1][9-dx] = KomaKind::from((teban,k));
-			} else {
-				if sx < 1 || sx > 9 || sy < 1 || sy > 9 {
-					return Err(self.create_error());
-				}
-
-				if dx < 1 || dx > 9 || dy < 1 || dy > 9 {
-					return Err(self.create_error());
-				}
-
-				let k = KomaKind::try_from_csa((teban,&kind))?;
-
-				let sx = sx as usize;
-				let sy = sy as usize;
-				let dx = dx as usize;
-				let dy = dy as usize;
-
-				let n = match k {
-					SFuN |
-						SKyouN |
-						SKeiN |
-						SGinN |
-						SKakuN |
-						SHishaN if banmen[sy-1][9-sx] != k => {
-
-						true
+			if line == "%KACHI" && !moveend {
+				mvs.push(CsaMove::Kachi)?;
+				moveend = true;
+				i += 1;
+			} else if line == "%HIKIWAKE" && !moveend {
+				mvs.push(CsaMove::Hikiwake)?;
+				moveend = true;
+				i += 1;
+			} else if line.starts_with("+") || line.starts_with("-") {
+				match teban {
+					Teban::Sente if !line.starts_with("+") => {
+						return Err(self.create_error());
 					},
-					GFuN |
-						GKyouN |
-						GKeiN |
-						GGinN |
-						GKakuN |
-						GHishaN if banmen[sy-1][9-sx] != k => {
-
-						true
+					Teban::Gote if !line.starts_with("-") => {
+						return Err(self.create_error());
 					},
-					_ => false,
+					_ => ()
+				}
+
+				let mut chars = line.chars();
+				chars.next();
+
+				let (sx,sy) = match chars.next() {
+					None => {
+						return Err(self.create_error());
+					},
+					Some(sx) => {
+						let sx = sx as u32 - '0' as u32;
+
+						let sy = match chars.next() {
+							None => {
+								return Err(self.create_error());
+							},
+							Some(sy) => {
+								sy as u32 - '0' as u32
+							}
+						};
+
+						(sx,sy)
+					}
 				};
 
-				mvs.push(Move::To(
-					KomaSrcPosition(sx as u32,sy as u32),
-					KomaDstToPosition(dx as u32,dy as u32,n)
-				));
+				let (dx,dy) = match chars.next() {
+					None => {
+						return Err(self.create_error());
+					},
+					Some(dx) => {
+						let dx = dx as u32 - '0' as u32;
 
-				banmen[sy-1][9-sx] = Blank;
-				banmen[dy-1][9-dx] = k;
-			}
+						let dy = match chars.next() {
+							None => {
+								return Err(self.create_error());
+							},
+							Some(dy) => {
+								dy as u32 - '0' as u32
+							}
+						};
 
-			i += 1;
+						(dx,dy)
+					}
+				};
 
-			if i < len && lines[i].starts_with("T") {
-				let line = &lines[i];
+				let kind = reader.read(&mut chars, 2)?;
 
-				let s = String::from(&line.as_str()[1..]);
-				let s:u32 = s.parse()?;
+				if sx == 0 && sy == 0 && dx >= 1 && dx <= 9 && dy >= 1 && dy <= 9 {
+					let k = MochigomaKind::try_from_csa(&kind)?;
+
+					mvs.push(CsaMove::Move(Move::Put(k,KomaDstPutPosition(dx,dy))))?;
+
+					let dx = dx as usize;
+					let dy = dy as usize;
+					banmen[dy-1][9-dx] = KomaKind::from((teban,k));
+				} else {
+					if sx < 1 || sx > 9 || sy < 1 || sy > 9 {
+						return Err(self.create_error());
+					}
+
+					if dx < 1 || dx > 9 || dy < 1 || dy > 9 {
+						return Err(self.create_error());
+					}
+
+					let k = KomaKind::try_from_csa((teban,&kind))?;
+
+					let sx = sx as usize;
+					let sy = sy as usize;
+					let dx = dx as usize;
+					let dy = dy as usize;
+
+					let n = match k {
+						SFuN |
+							SKyouN |
+							SKeiN |
+							SGinN |
+							SKakuN |
+							SHishaN if banmen[sy-1][9-sx] != k => {
+
+							true
+						},
+						GFuN |
+							GKyouN |
+							GKeiN |
+							GGinN |
+							GKakuN |
+							GHishaN if banmen[sy-1][9-sx] != k => {
+
+							true
+						},
+						_ => false,
+					};
+
+					mvs.push(CsaMove::Move(Move::To(
+						KomaSrcPosition(sx as u32,sy as u32),
+						KomaDstToPosition(dx as u32,dy as u32,n)
+					)))?;
+
+					banmen[sy-1][9-sx] = Blank;
+					banmen[dy-1][9-dx] = k;
+				}
 
 				i += 1;
 
-				elapsed.push(Some(s));
-			} else {
-				elapsed.push(None);
-			}
+				if i < len && lines[i].starts_with("T") {
+					let line = &lines[i];
 
-			teban = teban.opposite();
+					let s = String::from(&line.as_str()[1..]);
+					let s:u32 = s.parse()?;
+
+					i += 1;
+
+					elapsed.push(Some(s));
+				} else {
+					elapsed.push(None);
+				}
+
+				teban = teban.opposite();
+			} else if line.starts_with("%") {
+				end_state = Some(EndState::try_from_csa(line)?);
+				i += 1;
+			} else {
+				return Err(self.create_error());
+			}
 		}
 
-		Ok((mvs,elapsed))
+		Ok((mvs,elapsed,end_state))
+	}
+}
+#[derive(Clone, Copy, Eq, PartialOrd, PartialEq, Debug)]
+pub enum CsaMove {
+	Move(Move),
+	Kachi,
+	Hikiwake,
+}
+#[derive(Debug)]
+pub struct CsaMoves {
+	moves:Vec<CsaMove>,
+}
+impl CsaMoves {
+	pub fn new() -> CsaMoves {
+		CsaMoves {
+			moves:Vec::new()
+		}
+	}
+
+	pub fn iter(&self) -> Iter<CsaMove> {
+		self.moves.iter()
+	}
+
+	pub fn len(&self) -> usize {
+		self.moves.len()
+	}
+
+	pub fn push(&mut self,m:CsaMove) -> Result<usize,CsaStateError> {
+		let len = self.len();
+
+		if len == 0 {
+			self.moves.push(m);
+		} else {
+			match self.moves[len-1] {
+				CsaMove::Kachi | CsaMove::Hikiwake if m == CsaMove::Kachi || m == CsaMove::Hikiwake => {
+					return Err(CsaStateError::InvalidStateError(String::from(
+						"Only one special move can store."
+					)))
+				},
+				_ => {
+
+				}
+			}
+
+			self.moves.push(m);
+		}
+
+		Ok(len)
+	}
+}
+impl<'a> IntoIterator for &'a CsaMoves {
+	type Item = &'a CsaMove;
+	type IntoIter = Iter<'a,CsaMove>;
+
+	fn into_iter(self) -> Self::IntoIter {
+	self.iter()
+	}
+}
+impl Index<usize> for CsaMoves {
+	type Output = CsaMove;
+
+	fn index(&self,i:usize) -> &CsaMove {
+		&self.moves[i]
 	}
 }
 #[derive(Clone, Copy, Eq, PartialOrd, PartialEq, Debug)]

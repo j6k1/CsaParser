@@ -78,3 +78,34 @@ impl From<ParseIntError> for CsaParserError {
 		CsaParserError::ParseIntError(err)
 	}
 }
+impl From<CsaStateError> for CsaParserError {
+	fn from(err: CsaStateError) -> CsaParserError {
+		match err {
+			CsaStateError::InvalidStateError(s) => CsaParserError::InvalidStateError(s)
+		}
+	}
+}
+#[derive(Debug)]
+pub enum CsaStateError {
+	InvalidStateError(String),
+}
+impl fmt::Display for CsaStateError {
+	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+		match *self {
+			CsaStateError::InvalidStateError (ref s) => s.fmt(f),
+		}
+	}
+}
+impl error::Error for CsaStateError {
+	fn description(&self) -> &str {
+		match *self {
+			CsaStateError::InvalidStateError(_) => "Invalid read state.",
+		}
+	}
+
+	fn cause(&self) -> Option<&error::Error> {
+		match *self {
+			CsaStateError::InvalidStateError(_) => None,
+		}
+	}
+}
