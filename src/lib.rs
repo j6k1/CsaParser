@@ -210,7 +210,6 @@ impl<S> CsaParser<S> where S: CsaStream {
 		let mgote:HashMap<MochigomaKind,u32> = HashMap::new();
 		let mut mc = MochigomaCollections::Pair(msente,mgote);
 		let mut mvs:CsaMoves = CsaMoves::new();
-		let mut elapsed:Vec<Option<i32>> = Vec::new();
 		let mut end_state = None;
 
 		while let Some(line) = current {
@@ -268,10 +267,9 @@ impl<S> CsaParser<S> where S: CsaStream {
 					s.starts_with("+") || s.starts_with("-") || s.starts_with("T") || s.starts_with("%")
 				})?;
 
-				let (m,e,s) = CsaMovesParser::new().parse(lines,&banmen)?;
+				let (m,s) = CsaMovesParser::new().parse(lines,&banmen)?;
 
 				mvs = m;
-				elapsed = e;
 				end_state = s;
 			} else if line == "/" && stage >= Stage::Position {
 				stage = Stage::Initial;
@@ -281,7 +279,6 @@ impl<S> CsaParser<S> where S: CsaStream {
 											banmen,
 											mc,
 											mvs,
-											elapsed,
 											end_state,
 											comments));
 				version = None;
@@ -289,7 +286,6 @@ impl<S> CsaParser<S> where S: CsaStream {
 				banmen = Banmen([[KomaKind::Blank; 9]; 9]);
 				mc = MochigomaCollections::Pair(HashMap::new(),HashMap::new());
 				mvs = CsaMoves::new();
-				elapsed = Vec::new();
 				end_state = None;
 				comments = Vec::new();
 				current = self.read_next(&mut comments)?;
@@ -303,7 +299,7 @@ impl<S> CsaParser<S> where S: CsaStream {
 										info,
 										banmen,
 										mc,
-										mvs,elapsed,end_state,comments));
+										mvs,end_state,comments));
 			Ok(results)
 		} else {
 			Err(CsaParserError::FormatError(String::from("Invalid csa format.")))
@@ -337,7 +333,6 @@ pub struct CsaData {
 	pub initial_position:Banmen,
 	pub initial_mochigoma:MochigomaCollections,
 	pub moves:CsaMoves,
-	pub elapsed:Vec<Option<i32>>,
 	pub end_state:Option<EndState>,
 	pub comments:Vec<String>,
 }
@@ -346,7 +341,7 @@ impl CsaData {
 				kifu_info:Option<KifuInfo>,
 				banmen:Banmen,
 				mochigoma:MochigomaCollections,
-				mvs:CsaMoves, elapsed:Vec<Option<i32>>,
+				mvs:CsaMoves,
 				end_state:Option<EndState>,
 				comments:Vec<String>) -> CsaData {
 		CsaData {
@@ -355,7 +350,6 @@ impl CsaData {
 			initial_position:banmen,
 			initial_mochigoma:mochigoma,
 			moves:mvs,
-			elapsed:elapsed,
 			end_state:end_state,
 			comments:comments,
 		}
@@ -895,8 +889,25 @@ impl CsaMovesParser {
 		))
 	}
 
+	fn parse_elpsed(&self,lines:&Vec<String>,i:&mut usize,len:usize) -> Result<Option<i32>,CsaParserError> {
+		*i += 1;
+
+		if *i < len && lines[*i].starts_with("T") {
+			let line = &lines[*i];
+
+			let s = String::from(&line.as_str()[1..]);
+			let s:i32 = s.parse()?;
+
+			*i += 1;
+
+			Ok(Some(s))
+		} else {
+			Ok(None)
+		}
+	}
+
 	pub fn parse(&mut self, lines:Vec<String>,banmen:&Banmen)
-		-> Result<(CsaMoves,Vec<Option<i32>>,Option<EndState>),CsaParserError> {
+		-> Result<(CsaMoves,Option<EndState>),CsaParserError> {
 
 		if lines.len() == 0 {
 			return Err(CsaParserError::InvalidStateError(String::from(
@@ -917,7 +928,6 @@ impl CsaMovesParser {
 		};
 
 		let mut mvs:CsaMoves = CsaMoves::new();
-		let mut elapsed:Vec<Option<i32>> = Vec::new();
 
 		let mut reader = CsaStringReader::new();
 
@@ -930,13 +940,11 @@ impl CsaMovesParser {
 			let line = &lines[i];
 
 			if line == "%KACHI" && !moveend {
-				mvs.push(CsaMove::Kachi)?;
+				mvs.push(CsaMove::Kachi(self.parse_elpsed(&lines,&mut i,len)?))?;
 				moveend = true;
-				i += 1;
 			} else if line == "%HIKIWAKE" && !moveend {
-				mvs.push(CsaMove::Hikiwake)?;
+				mvs.push(CsaMove::Hikiwake(self.parse_elpsed(&lines,&mut i,len)?))?;
 				moveend = true;
-				i += 1;
 			} else if line.starts_with("+") || line.starts_with("-") {
 				match teban {
 					Teban::Sente if !line.starts_with("+") => {
@@ -996,7 +1004,8 @@ impl CsaMovesParser {
 				if sx == 0 && sy == 0 && dx >= 1 && dx <= 9 && dy >= 1 && dy <= 9 {
 					let k = MochigomaKind::try_from_csa(&kind)?;
 
-					mvs.push(CsaMove::Move(Move::Put(k,KomaDstPutPosition(dx,dy))))?;
+					mvs.push(CsaMove::Move((Move::Put(k,KomaDstPutPosition(dx,dy)),
+												self.parse_elpsed(&lines,&mut i,len)?)))?;
 
 					let dx = dx as usize;
 					let dy = dy as usize;
@@ -1039,16 +1048,14 @@ impl CsaMovesParser {
 						_ => false,
 					};
 
-					mvs.push(CsaMove::Move(Move::To(
+					mvs.push(CsaMove::Move((Move::To(
 						KomaSrcPosition(sx as u32,sy as u32),
 						KomaDstToPosition(dx as u32,dy as u32,n)
-					)))?;
+					),self.parse_elpsed(&lines,&mut i,len)?)))?;
 
 					banmen[sy-1][9-sx] = Blank;
 					banmen[dy-1][9-dx] = k;
 				}
-
-				i += 1;
 			} else if line.starts_with("%") {
 				end_state = Some(EndState::try_from_csa(line)?);
 				i += 1;
@@ -1056,29 +1063,16 @@ impl CsaMovesParser {
 				return Err(self.create_error());
 			}
 
-			if i < len && lines[i].starts_with("T") {
-				let line = &lines[i];
-
-				let s = String::from(&line.as_str()[1..]);
-				let s:i32 = s.parse()?;
-
-				i += 1;
-
-				elapsed.push(Some(s));
-			} else {
-				elapsed.push(None);
-			}
-
 			teban = teban.opposite();
 		}
-		Ok((mvs,elapsed,end_state))
+		Ok((mvs,end_state))
 	}
 }
 #[derive(Clone, Copy, Eq, PartialOrd, PartialEq, Debug)]
 pub enum CsaMove {
-	Move(Move),
-	Kachi,
-	Hikiwake,
+	Move((Move,Option<i32>)),
+	Kachi(Option<i32>),
+	Hikiwake(Option<i32>),
 }
 #[derive(Debug)]
 pub struct CsaMoves {
@@ -1106,10 +1100,15 @@ impl CsaMoves {
 			self.moves.push(m);
 		} else {
 			match self.moves[len-1] {
-				CsaMove::Kachi | CsaMove::Hikiwake if m == CsaMove::Kachi || m == CsaMove::Hikiwake => {
-					return Err(CsaStateError::InvalidStateError(String::from(
-						"Only one special move can store."
-					)))
+				CsaMove::Kachi(_) | CsaMove::Hikiwake(_) => {
+					match m {
+						CsaMove::Kachi(_) | CsaMove::Hikiwake(_) => {
+							return Err(CsaStateError::InvalidStateError(String::from(
+								"Only one special move can store."
+							)));
+						},
+						_ => (),
+					}
 				},
 				_ => {
 
