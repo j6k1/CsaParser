@@ -1127,7 +1127,7 @@ impl<'a> IntoIterator for &'a CsaMoves {
 	type IntoIter = Iter<'a,CsaMove>;
 
 	fn into_iter(self) -> Self::IntoIter {
-	self.iter()
+		self.iter()
 	}
 }
 impl Index<usize> for CsaMoves {
