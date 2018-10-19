@@ -210,7 +210,7 @@ impl<S> CsaParser<S> where S: CsaStream {
 		let mgote:HashMap<MochigomaKind,u32> = HashMap::new();
 		let mut mc = MochigomaCollections::Pair(msente,mgote);
 		let mut mvs:CsaMoves = CsaMoves::new();
-		let mut elapsed:Vec<Option<u32>> = Vec::new();
+		let mut elapsed:Vec<Option<i32>> = Vec::new();
 		let mut end_state = None;
 
 		while let Some(line) = current {
@@ -337,7 +337,7 @@ pub struct CsaData {
 	pub initial_position:Banmen,
 	pub initial_mochigoma:MochigomaCollections,
 	pub moves:CsaMoves,
-	pub elapsed:Vec<Option<u32>>,
+	pub elapsed:Vec<Option<i32>>,
 	pub end_state:Option<EndState>,
 	pub comments:Vec<String>,
 }
@@ -346,7 +346,7 @@ impl CsaData {
 				kifu_info:Option<KifuInfo>,
 				banmen:Banmen,
 				mochigoma:MochigomaCollections,
-				mvs:CsaMoves, elapsed:Vec<Option<u32>>,
+				mvs:CsaMoves, elapsed:Vec<Option<i32>>,
 				end_state:Option<EndState>,
 				comments:Vec<String>) -> CsaData {
 		CsaData {
@@ -896,7 +896,7 @@ impl CsaMovesParser {
 	}
 
 	pub fn parse(&mut self, lines:Vec<String>,banmen:&Banmen)
-		-> Result<(CsaMoves,Vec<Option<u32>>,Option<EndState>),CsaParserError> {
+		-> Result<(CsaMoves,Vec<Option<i32>>,Option<EndState>),CsaParserError> {
 
 		if lines.len() == 0 {
 			return Err(CsaParserError::InvalidStateError(String::from(
@@ -917,7 +917,7 @@ impl CsaMovesParser {
 		};
 
 		let mut mvs:CsaMoves = CsaMoves::new();
-		let mut elapsed:Vec<Option<u32>> = Vec::new();
+		let mut elapsed:Vec<Option<i32>> = Vec::new();
 
 		let mut reader = CsaStringReader::new();
 
@@ -1060,7 +1060,7 @@ impl CsaMovesParser {
 				let line = &lines[i];
 
 				let s = String::from(&line.as_str()[1..]);
-				let s:u32 = s.parse()?;
+				let s:i32 = s.parse()?;
 
 				i += 1;
 
