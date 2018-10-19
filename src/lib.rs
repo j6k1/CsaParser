@@ -1004,8 +1004,8 @@ impl CsaMovesParser {
 				if sx == 0 && sy == 0 && dx >= 1 && dx <= 9 && dy >= 1 && dy <= 9 {
 					let k = MochigomaKind::try_from_csa(&kind)?;
 
-					mvs.push(CsaMove::Move((Move::Put(k,KomaDstPutPosition(dx,dy)),
-												self.parse_elpsed(&lines,&mut i,len)?)))?;
+					mvs.push(CsaMove::Move(Move::Put(k,KomaDstPutPosition(dx,dy)),
+												self.parse_elpsed(&lines,&mut i,len)?))?;
 
 					let dx = dx as usize;
 					let dy = dy as usize;
@@ -1048,10 +1048,10 @@ impl CsaMovesParser {
 						_ => false,
 					};
 
-					mvs.push(CsaMove::Move((Move::To(
+					mvs.push(CsaMove::Move(Move::To(
 						KomaSrcPosition(sx as u32,sy as u32),
 						KomaDstToPosition(dx as u32,dy as u32,n)
-					),self.parse_elpsed(&lines,&mut i,len)?)))?;
+					),self.parse_elpsed(&lines,&mut i,len)?))?;
 
 					banmen[sy-1][9-sx] = Blank;
 					banmen[dy-1][9-dx] = k;
@@ -1070,7 +1070,7 @@ impl CsaMovesParser {
 }
 #[derive(Clone, Copy, Eq, PartialOrd, PartialEq, Debug)]
 pub enum CsaMove {
-	Move((Move,Option<i32>)),
+	Move(Move,Option<i32>),
 	Kachi(Option<i32>),
 	Hikiwake(Option<i32>),
 }
