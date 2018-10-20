@@ -205,6 +205,7 @@ impl<S> CsaParser<S> where S: CsaStream {
 		let mut version = None;
 		let mut info = None;
 		let banmen:[[KomaKind; 9]; 9] = [[KomaKind::Blank; 9]; 9];
+		let mut teban = Teban::Sente;
 		let mut banmen = Banmen(banmen);
 		let msente:HashMap<MochigomaKind,u32> = HashMap::new();
 		let mgote:HashMap<MochigomaKind,u32> = HashMap::new();
@@ -267,8 +268,9 @@ impl<S> CsaParser<S> where S: CsaStream {
 					s.starts_with("+") || s.starts_with("-") || s.starts_with("T") || s.starts_with("%")
 				})?;
 
-				let (m,s) = CsaMovesParser::new().parse(lines,&banmen)?;
+				let (t,m,s) = CsaMovesParser::new().parse(lines,&banmen)?;
 
+				teban = t;
 				mvs = m;
 				end_state = s;
 			} else if line == "/" && stage >= Stage::Position {
@@ -276,6 +278,7 @@ impl<S> CsaParser<S> where S: CsaStream {
 
 				results.push(CsaData::new(version,
 											info,
+											teban,
 											banmen,
 											mc,
 											mvs,
@@ -297,6 +300,7 @@ impl<S> CsaParser<S> where S: CsaStream {
 		if stage >= Stage::Position {
 			results.push(CsaData::new(version,
 										info,
+										teban,
 										banmen,
 										mc,
 										mvs,end_state,comments));
@@ -330,6 +334,7 @@ enum Stage {
 pub struct CsaData {
 	pub version:Option<String>,
 	pub kifu_info:Option<KifuInfo>,
+	pub teban_at_start:Teban,
 	pub initial_position:Banmen,
 	pub initial_mochigoma:MochigomaCollections,
 	pub moves:CsaMoves,
@@ -339,6 +344,7 @@ pub struct CsaData {
 impl CsaData {
 	pub fn new(version:Option<String>,
 				kifu_info:Option<KifuInfo>,
+				teban:Teban,
 				banmen:Banmen,
 				mochigoma:MochigomaCollections,
 				mvs:CsaMoves,
@@ -347,6 +353,7 @@ impl CsaData {
 		CsaData {
 			version:version,
 			kifu_info:kifu_info,
+			teban_at_start:teban,
 			initial_position:banmen,
 			initial_mochigoma:mochigoma,
 			moves:mvs,
@@ -907,7 +914,7 @@ impl CsaMovesParser {
 	}
 
 	pub fn parse(&mut self, lines:Vec<String>,banmen:&Banmen)
-		-> Result<(CsaMoves,Option<EndState>),CsaParserError> {
+		-> Result<(Teban,CsaMoves,Option<EndState>),CsaParserError> {
 
 		if lines.len() == 0 {
 			return Err(CsaParserError::InvalidStateError(String::from(
@@ -922,6 +929,8 @@ impl CsaMovesParser {
 				return Err(self.create_error());
 			}
 		};
+
+		let teban_at_start = teban;
 
 		let mut banmen = match banmen {
 			Banmen(ref kinds) => kinds.clone()
@@ -1065,7 +1074,7 @@ impl CsaMovesParser {
 
 			teban = teban.opposite();
 		}
-		Ok((mvs,end_state))
+		Ok((teban_at_start,mvs,end_state))
 	}
 }
 #[derive(Clone, Copy, Eq, PartialOrd, PartialEq, Debug)]
