@@ -72,7 +72,9 @@ impl CsaFileStream {
 		let mut buf = String::new();
 		let n = reader.read_line(&mut buf)?;
 
-		buf = buf.trim_right().to_string();
+		let r: &[_] = &['\0'];
+
+		buf = buf.trim_right().trim_right_matches(r).to_string();
 
 		let lines = if n == 0 {
 			None
@@ -99,12 +101,15 @@ impl CsaStream for CsaFileStream {
 
 			let mut buf = String::new();
 			let mut n = self.reader.read_line(&mut buf)?;
-			buf = buf.trim_right().to_string();
+
+			let r: &[_] = &['\0'];
+
+			buf = buf.trim_right().trim_right_matches(r).to_string();
 
 			while n > 0 && buf == "" {
 				buf.clear();
 				n = self.reader.read_line(&mut buf)?;
-				buf = buf.trim_right().to_string();
+				buf = buf.trim_right().trim_right_matches(r).to_string();
 			}
 
 			if n == 0 {
