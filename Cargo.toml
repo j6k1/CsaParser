@@ -5,3 +5,4 @@ authors = ["jinpu"]
 
 [dependencies.usiagent]
 git = "https://github.com/j6k1/USIAgent.git"
+#path = "../USIAgent"
