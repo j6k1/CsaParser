@@ -21,7 +21,7 @@ impl error::Error for CsaStreamReadError {
 		}
 	}
 
-	fn cause(&self) -> Option<&error::Error> {
+	fn source(&self) -> Option<&(dyn error::Error + 'static)> {
 		match *self {
 			CsaStreamReadError::IOError(ref e) => Some(e),
 		}
@@ -59,7 +59,7 @@ impl error::Error for CsaParserError {
 		}
 	}
 
-	fn cause(&self) -> Option<&error::Error> {
+	fn source(&self) -> Option<&(dyn error::Error + 'static)> {
 		match *self {
 			CsaParserError::StreamReadError(ref e) => Some(e),
 			CsaParserError::FormatError(_) => None,
@@ -103,7 +103,7 @@ impl error::Error for CsaStateError {
 		}
 	}
 
-	fn cause(&self) -> Option<&error::Error> {
+	fn source(&self) -> Option<&(dyn error::Error + 'static)> {
 		match *self {
 			CsaStateError::InvalidStateError(_) => None,
 		}

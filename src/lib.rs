@@ -74,7 +74,7 @@ impl CsaFileStream {
 
 		let r: &[_] = &['\0'];
 
-		buf = buf.trim_right().trim_right_matches(r).to_string();
+		buf = buf.trim_end().trim_end_matches(r).to_string();
 
 		let lines = if n == 0 {
 			None
@@ -104,12 +104,12 @@ impl CsaStream for CsaFileStream {
 
 			let r: &[_] = &['\0'];
 
-			buf = buf.trim_right().trim_right_matches(r).to_string();
+			buf = buf.trim_end().trim_end_matches(r).to_string();
 
 			while n > 0 && buf == "" {
 				buf.clear();
 				n = self.reader.read_line(&mut buf)?;
-				buf = buf.trim_right().trim_right_matches(r).to_string();
+				buf = buf.trim_end().trim_end_matches(r).to_string();
 			}
 
 			if n == 0 {
@@ -251,7 +251,7 @@ impl<S> CsaParser<S> where S: CsaStream {
 
 				let mut lines:Vec<String> = Vec::new();
 
-				let mut l = line;
+				let l = line;
 				lines.push(l.clone());
 
 				current = self.read_next_lines(&mut lines,&mut comments,|s| {
@@ -266,7 +266,7 @@ impl<S> CsaParser<S> where S: CsaStream {
 
 				let mut lines:Vec<String> = Vec::new();
 
-				let mut l = line;
+				let l = line;
 				lines.push(l.clone());
 
 				current = self.read_next_lines(&mut lines,&mut comments,|s| {
@@ -599,7 +599,7 @@ impl CsaPositionParser {
 				let x = x as usize - '0' as usize;
 				let y = y as usize - '0' as usize;
 
-				let mut kind = reader.read(&mut chars, 2)?;
+				let kind = reader.read(&mut chars, 2)?;
 
 				let k = initial_banmen[y-1][9-x];
 
