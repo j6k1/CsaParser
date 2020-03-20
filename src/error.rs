@@ -43,9 +43,9 @@ impl fmt::Display for CsaParserError {
 	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
 		match *self {
 			CsaParserError::StreamReadError(_) => write!(f, "There was an error loading the stream."),
-			CsaParserError::FormatError(ref s) => s.fmt(f),
-			CsaParserError::ParseIntError(ref e) => e.fmt(f),
-			CsaParserError::InvalidStateError (ref s) => s.fmt(f),
+			CsaParserError::FormatError(ref s) => write!(f, "Invalid format. ({})",s),
+			CsaParserError::ParseIntError(ref e) => write!(f, "parse int error. ({})",e),
+			CsaParserError::InvalidStateError (ref s) => write!(f, "Invalid read state. ({})",s),
 		}
 	}
 }
@@ -54,7 +54,7 @@ impl error::Error for CsaParserError {
 		match *self {
 			CsaParserError::StreamReadError(_) => "There was an error loading the stream.",
 			CsaParserError::FormatError(_) => "Invalid format.",
-			CsaParserError::ParseIntError(ref e) => e.description(),
+			CsaParserError::ParseIntError(_) => "parse int error.",
 			CsaParserError::InvalidStateError(_) => "Invalid read state.",
 		}
 	}
@@ -92,7 +92,7 @@ pub enum CsaStateError {
 impl fmt::Display for CsaStateError {
 	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
 		match *self {
-			CsaStateError::InvalidStateError (ref s) => s.fmt(f),
+			CsaStateError::InvalidStateError (ref s) => write!(f,"Invalid read state. ({})",s),
 		}
 	}
 }
