@@ -8,7 +8,6 @@ use std::io::BufRead;
 use std::fs::File;
 use std::fs::OpenOptions;
 use std::path::Path;
-use std::collections::HashMap;
 use std::str::Chars;
 use std::slice::Iter;
 use std::ops::Index;
@@ -212,8 +211,8 @@ impl<S> CsaParser<S> where S: CsaStream {
 		let banmen:[[KomaKind; 9]; 9] = [[KomaKind::Blank; 9]; 9];
 		let mut teban = Teban::Sente;
 		let mut banmen = Banmen(banmen);
-		let msente:HashMap<MochigomaKind,u32> = HashMap::new();
-		let mgote:HashMap<MochigomaKind,u32> = HashMap::new();
+		let msente:Mochigoma = Mochigoma::new();
+		let mgote:Mochigoma = Mochigoma::new();
 		let mut mc = MochigomaCollections::Pair(msente,mgote);
 		let mut mvs:CsaMoves = CsaMoves::new();
 		let mut end_state = None;
@@ -292,7 +291,7 @@ impl<S> CsaParser<S> where S: CsaStream {
 				version = None;
 				info = None;
 				banmen = Banmen([[KomaKind::Blank; 9]; 9]);
-				mc = MochigomaCollections::Pair(HashMap::new(),HashMap::new());
+				mc = MochigomaCollections::Pair(Mochigoma::new(),Mochigoma::new());
 				mvs = CsaMoves::new();
 				end_state = None;
 				comments = Vec::new();
@@ -634,8 +633,8 @@ impl CsaPositionParser {
 			Ok((Banmen(initial_banmen),MochigomaCollections::Empty))
 		} else if lines[0].starts_with("P1") {
 			let mut initial_banmen:[[KomaKind; 9]; 9] = [[KomaKind::Blank; 9]; 9];
-			let mut ms = Rule::filled_mochigoma_hashmap();
-			let mut mg = Rule::filled_mochigoma_hashmap();
+			let mut ms = Mochigoma::filled();
+			let mut mg = Mochigoma::filled();
 
 			let mut sou_count = 1;
 			let mut gou_count = 1;
@@ -705,11 +704,11 @@ impl CsaPositionParser {
 
 								match teban {
 									Teban::Sente => {
-										let c = match ms.get(&k) {
-											None | Some(&0)=> {
+										let c = match ms.get(k) {
+											0 => {
 												return Err(self.create_error());
 											},
-											Some(c) => {
+											c => {
 												c - 1
 											}
 										};
@@ -717,11 +716,11 @@ impl CsaPositionParser {
 										ms.insert(k, c);
 									},
 									Teban::Gote => {
-										let c = match mg.get(&k) {
-											None | Some(&0)=> {
+										let c = match mg.get(k) {
+											0 => {
 												return Err(self.create_error());
 											},
-											Some(c) => {
+											c => {
 												c - 1
 											}
 										};
@@ -744,8 +743,8 @@ impl CsaPositionParser {
 			Ok((Banmen(initial_banmen),MochigomaCollections::Pair(ms,mg)))
 		} else if lines[0].starts_with("P+") || lines[0].starts_with("P-") {
 			let mut initial_banmen:[[KomaKind; 9]; 9] = [[KomaKind::Blank; 9]; 9];
-			let mut ms = Rule::filled_mochigoma_hashmap();
-			let mut mg = Rule::filled_mochigoma_hashmap();
+			let mut ms = Mochigoma::filled();
+			let mut mg = Mochigoma::filled();
 
 			let mut sou_count = 1;
 			let mut gou_count = 1;
@@ -790,17 +789,17 @@ impl CsaPositionParser {
 							match teban {
 								Teban::Sente => {
 									for m in &MOCHIGOMA_KINDS {
-										let c = *mg.get(m).unwrap_or(&0);
+										let c = mg.get(*m);
 										mg.insert(*m, 0);
-										let c = *ms.get(m).unwrap_or(&0) + c;
+										let c = ms.get(*m) + c;
 										ms.insert(*m,c);
 									}
 								},
 								Teban::Gote => {
 									for m in &MOCHIGOMA_KINDS {
-										let c = *ms.get(m).unwrap_or(&0);
+										let c = ms.get(*m);
 										ms.insert(*m, 0);
-										let c = *mg.get(m).unwrap_or(&0) + c;
+										let c = mg.get(*m) + c;
 										mg.insert(*m,c);
 									}
 								}
@@ -848,11 +847,11 @@ impl CsaPositionParser {
 
 							match teban {
 								Teban::Sente => {
-									let c = match ms.get(&k) {
-										None | Some(&0)=> {
+									let c = match ms.get(k) {
+										0 => {
 											return Err(self.create_error());
 										},
-										Some(c) => {
+										c => {
 											c - 1
 										}
 									};
@@ -860,11 +859,11 @@ impl CsaPositionParser {
 									ms.insert(k, c);
 								},
 								Teban::Gote => {
-									let c = match mg.get(&k) {
-										None | Some(&0)=> {
+									let c = match mg.get(k) {
+										0 => {
 											return Err(self.create_error());
 										},
-										Some(c) => {
+										c => {
 											c - 1
 										}
 									};

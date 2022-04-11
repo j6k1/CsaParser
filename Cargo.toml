@@ -1,8 +1,17 @@
 [package]
 name = "csaparser"
-version = "0.1.0"
-authors = ["jinpu"]
+version = "0.3.0"
+authors = ["jinpu <nanasi18@gmail.com>"]
+description = "CsaParser is a parser for the CSA standard file format of Computer Shogi."
+documentation = "https://docs.rs/CsaParser"
+homepage = "https://crates.io/crates/CsaParser"
+repository = "https://github.com/j6k1/CsaParser"
 
-[dependencies.usiagent]
-git = "https://github.com/j6k1/USIAgent.git"
-#path = "../USIAgent"
+readme = "README.md"
+
+keywords = ["shogi","shogiai","csa-format"]
+categories = []
+license = "MIT"
+
+[dependencies]
+usiagent = "0.6.1"
