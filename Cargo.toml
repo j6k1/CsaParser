@@ -14,4 +14,4 @@ categories = []
 license = "MIT"
 
 [dependencies]
-usiagent = "0.6.3"
+usiagent = "0.6.8"
